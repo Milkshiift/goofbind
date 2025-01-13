@@ -99,8 +99,12 @@ async fn xdg_input_thread() {
 }
 
 async fn xdg_register_keybind(keybind: String, id: KeybindId) -> Result<()> {
+    let new_keybind = Keybind::from_string(keybind);
+    let mut keybinds = KEYBINDS.lock().unwrap();
+    keybinds.register_keybind(new_keybind.clone(), id);
+
     let shortcut = NewShortcut::new(format!("{}", id), id.to_string())
-        .preferred_trigger(Some(keybind.clone().as_str()));
+        .preferred_trigger(Some(new_keybind.to_string().as_str()));
     let lock = XDG_STATE.lock().unwrap();
     let state = lock.as_ref().unwrap();
 
@@ -108,9 +112,6 @@ async fn xdg_register_keybind(keybind: String, id: KeybindId) -> Result<()> {
         .portal
         .bind_shortcuts(&state.session, &[shortcut], &WindowIdentifier::None)
         .await?;
-
-    let mut keybinds = KEYBINDS.lock().unwrap();
-    keybinds.register_keybind(Keybind::from_string(keybind.clone()), id);
     Ok(())
 }
 

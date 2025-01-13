@@ -34,7 +34,7 @@ mod tests {
             start_keybinds(tx);
         });
         thread::sleep(std::time::Duration::from_secs(2));
-        register_keybind("SHIFT+ALT+m".to_string(), 1);
+        register_keybind("shift+alt+m".to_string(), 1);
         // register_keybind("SHIFT+CTRL+a".to_string(), 2);
         loop {
             match rx.recv() {

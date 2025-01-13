@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::format};
 
 pub type KeybindId = u32;
 
@@ -12,7 +12,7 @@ pub enum KeybindTrigger {
     Released(KeybindId),
 }
 
-#[derive(PartialEq, Eq, Hash, Debug)]
+#[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub(crate) struct Keybind {
     pub shift: bool,
     pub alt: bool,
@@ -22,7 +22,8 @@ pub(crate) struct Keybind {
 
 impl Keybind {
     pub fn from_string(keybind: String) -> Self {
-        let keys = keybind.split("+");
+        let lowercase_keybind = keybind.to_lowercase();
+        let keys = lowercase_keybind.split("+");
         let mut shift = false;
         let mut alt = false;
         let mut ctrl = false;
@@ -39,6 +40,26 @@ impl Keybind {
             ctrl,
             character,
         }
+    }
+}
+
+impl ToString for Keybind {
+    fn to_string(&self) -> String {
+        let mut res = String::new();
+        // formatted for https://specifications.freedesktop.org/shortcuts-spec/latest/#specification
+        if self.shift {
+            res.push_str("+SHIFT");
+        }
+        if self.alt {
+            res.push_str("+ALT");
+        }
+        if self.ctrl {
+            res.push_str("+CTRL");
+        }
+        if let Some(character) = &self.character {
+            res.push_str(&format!("+{}",character));
+        }
+        res.trim_start_matches("+").to_owned()
     }
 }
 
