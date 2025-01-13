@@ -11,6 +11,7 @@
     cmake
     libclang
     pkg-config
+    wayland
   ];
   env.LIBCLANG_PATH="${pkgs.libclang.lib}/lib";
   enterShell = ''

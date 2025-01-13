@@ -2,7 +2,6 @@ mod errors;
 #[cfg(all(feature = "node", not(test)))]
 pub mod js; // BREAKS TESTS
 mod structs;
-mod utils;
 
 #[cfg_attr(target_os = "linux", path = "linux.rs")]
 mod platform;
@@ -12,8 +11,8 @@ use std::sync::mpsc::Sender;
 use platform::*;
 use structs::{KeybindId, KeybindTrigger};
 
-pub fn start_keybinds(window_id: Option<u64>, display_id: Option<u64>, tx: Sender<KeybindTrigger>) {
-    start_keybinds_internal(window_id, display_id, tx).unwrap();
+pub fn start_keybinds(tx: Sender<KeybindTrigger>) {
+    start_keybinds_internal(tx).unwrap();
 }
 
 pub fn register_keybind(keybind: String, id: KeybindId) {
@@ -32,11 +31,11 @@ mod tests {
     fn demo() {
         let (tx, rx) = channel::<KeybindTrigger>();
         thread::spawn(|| {
-            start_keybinds(None, None, tx);
+            start_keybinds(tx);
         });
         thread::sleep(std::time::Duration::from_secs(2));
-        register_keybind("shift+alt+m".to_string(), 1);
-        register_keybind("shift+ctrl+a".to_string(), 2);
+        register_keybind("SHIFT+ALT+m".to_string(), 1);
+        // register_keybind("SHIFT+CTRL+a".to_string(), 2);
         loop {
             match rx.recv() {
                 Err(err) => {

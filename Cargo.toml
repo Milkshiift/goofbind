@@ -10,12 +10,12 @@ crate-type = ["cdylib"]
 uiohook-sys = { path = "./uiohook-sys" }
 thiserror = "1.0.63"
 node-bindgen = { version = "6.0", optional = true }
+futures = "0.3"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 xcb = { version = "1.4.0", features = ["x11", "xkb", "as-raw-xcb-connection"] }
 xkbcommon = { version = "0.8.0", features = ["x11"] }
 ashpd = { version = "0.9.1", features = ["wayland"] }
-tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync"] }
 
 [features]
 default = ["node"]

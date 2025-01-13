@@ -1,4 +1,3 @@
-use ashpd::Error;
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, VenbindError>;
@@ -11,12 +10,5 @@ pub enum VenbindError {
     Message(String),
     #[cfg(all(target_os = "linux"))]
     #[error("ashpd error: {0}")]
-    AshPdError(ashpd::Error),
-}
-
-#[cfg(all(target_os = "linux"))]
-impl From<ashpd::Error> for VenbindError {
-    fn from(value: Error) -> Self {
-        VenbindError::AshPdError(value)
-    }
+    AshPdError(#[from] ashpd::Error),
 }
