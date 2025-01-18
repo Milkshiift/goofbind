@@ -10,10 +10,10 @@ fn main() {
         .build();
     println!("cargo:rustc-link-search=native={}/lib", dst.display());
     println!("cargo:rustc-link-lib=static=uiohook");
-    if std::env::var_os("CARGO_CFG_WINDOWS").is_some() {
+    if env::var_os("CARGO_CFG_WINDOWS").is_some() {
         println!("cargo:rustc-link-lib=user32");
     }
-    if std::env::var_os("CARGO_CFG_UNIX").is_some() {
+    if env::var_os("CARGO_CFG_UNIX").is_some() {
         println!("cargo:rustc-link-lib=X11");
         println!("cargo:rustc-link-lib=xcb");
         println!("cargo:rustc-link-lib=X11-xcb");
@@ -46,6 +46,7 @@ fn main() {
         let bindings_windows = bindgen::Builder::default()
             .header("stdint.h")
             .header("vendor/src/windows/input_helper.h")
+            .allowlist_file("vendor/src/windows/input_helper.h")
             .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
             .generate()
             .expect("Unable to generate bindings");

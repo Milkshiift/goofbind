@@ -8,15 +8,15 @@ crate-type = ["cdylib"]
 
 [dependencies]
 uiohook-sys = { path = "./uiohook-sys" }
-thiserror = "1.0.63"
+thiserror = "1.0"
 futures = "0.3"
 napi = { version = "2", features = ["napi4"], optional = true }
 napi-derive = { version = "2", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-xcb = { version = "1.4.0", features = ["x11", "xkb", "as-raw-xcb-connection"] }
-xkbcommon = { version = "0.8.0", features = ["x11"] }
-ashpd = { version = "0.9.1", features = ["wayland"] }
+xcb = { version = "1", features = ["x11", "xkb", "as-raw-xcb-connection"] }
+xkbcommon = { version = "0.8", features = ["x11"] }
+ashpd = { version = "0.10", features = ["wayland"] }
 
 [features]
 default = ["node"]

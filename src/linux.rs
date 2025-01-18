@@ -1,7 +1,6 @@
 use ashpd::{
     desktop::{global_shortcuts::*, *},
     zbus::export::futures_util::StreamExt,
-    WindowIdentifier,
 };
 use std::{
     cell::RefCell,
@@ -110,7 +109,7 @@ async fn xdg_register_keybind(keybind: String, id: KeybindId) -> Result<()> {
 
     state
         .portal
-        .bind_shortcuts(&state.session, &[shortcut], &WindowIdentifier::None)
+        .bind_shortcuts(&state.session, &[shortcut], None)
         .await?;
     Ok(())
 }

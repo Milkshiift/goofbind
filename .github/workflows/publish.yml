@@ -15,7 +15,6 @@ jobs:
             target_suffix: -unknown-linux-gnu
           - os: windows
             target_suffix: -pc-windows-msvc
-            prebuild_command: cargo install cargo-xwin
         arch: [x86_64]
     runs-on: ubuntu-latest
     steps:
@@ -31,7 +30,6 @@ jobs:
       - name: Build
         shell: devenv shell bash -- -e {0}
         run: |
-          ${{ matrix.platform.prebuild_command }}
           npx --yes --package=@napi-rs/cli@canary -- napi build --release --cross-compile --target ${{ matrix.arch }}${{ matrix.platform.target_suffix }}
           mkdir dist
           cp index.node ./dist/venbind-${{ matrix.platform.os }}-${{ matrix.arch }}.node

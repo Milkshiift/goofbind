@@ -14,6 +14,7 @@
     wayland
     ninja
     llvmPackages_latest.llvm
+    cargo-xwin
   ];
   env.LIBCLANG_PATH="${pkgs.libclang.lib}/lib";
   enterShell = ''
