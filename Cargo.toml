@@ -16,7 +16,7 @@ napi-derive = { version = "2", optional = true }
 [target.'cfg(target_os = "linux")'.dependencies]
 xcb = { version = "1", features = ["x11", "xkb", "as-raw-xcb-connection"] }
 xkbcommon = { version = "0.8", features = ["x11"] }
-ashpd = { version = "0.10", features = ["wayland"] }
+ashpd = { version = "0.10", features = ["wayland", "async-std"], default-features = false }
 
 [features]
 default = ["node"]

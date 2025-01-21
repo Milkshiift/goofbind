@@ -8,6 +8,8 @@ use napi_derive::napi;
 
 use crate::structs::{KeybindId, KeybindTrigger};
 
+pub use crate::structs::PreRegisterAction;
+
 #[napi(ts_args_type = "callback: (err: null | Error, id: number) => void")]
 pub fn start_keybinds(callback: JsFunction) -> Result<()> {
     let (tx, rx) = channel::<KeybindTrigger>();
@@ -42,4 +44,16 @@ pub fn register_keybind(keybind: String, #[napi(ts_arg_type = "number")] id: Key
 #[napi]
 pub fn unregister_keybind(#[napi(ts_arg_type = "number")] id: KeybindId) {
     crate::unregister_keybind(id);
+}
+
+#[napi]
+pub fn preregister_keybinds(#[napi(ts_arg_type = "PreRegisterAction[]")] actions: Vec<PreRegisterAction>) {
+    #[cfg(target_os = "linux")]
+    {
+        crate::platform::xdg_preregister_keybinds(actions).unwrap();
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        panic!("Can't preregister keybinds on non-linux!");
+    }
 }

@@ -5,7 +5,7 @@ use ashpd::{
 use std::{
     cell::RefCell,
     env,
-    sync::{mpsc::Sender, LazyLock, Mutex, OnceLock},
+    sync::{mpsc::Sender, LazyLock, Mutex, OnceLock}
 };
 use uiohook_sys::{
     _event_type_EVENT_KEY_PRESSED, _uiohook_event, hook_run, hook_set_dispatch_proc,
@@ -14,8 +14,11 @@ use uiohook_sys::{
 use xcb::Extension;
 use xkbcommon::xkb::{self, State};
 
-use crate::errors::{Result, VenbindError};
 use crate::structs::{Keybind, KeybindId, KeybindTrigger, Keybinds};
+use crate::{
+    errors::{Result, VenbindError},
+    js::PreRegisterAction,
+};
 
 static KEYBINDS: LazyLock<Mutex<Keybinds>> = LazyLock::new(|| Mutex::new(Keybinds::default()));
 static TX: OnceLock<Sender<KeybindTrigger>> = OnceLock::new();
@@ -42,10 +45,9 @@ pub(crate) fn start_keybinds_internal(tx: Sender<KeybindTrigger>) -> Result<()> 
 
 pub(crate) fn register_keybind_internal(keybind: String, id: KeybindId) -> Result<()> {
     if is_wayland() || use_xdg_on_x11() {
-        futures::executor::block_on(xdg_register_keybind(keybind, id))
-    } else {
-        uiohook_register_keybind(keybind, id)
+        panic!("Keybinds should be preregistered on wayland!");
     }
+    uiohook_register_keybind(keybind, id)
 }
 
 pub(crate) fn unregister_keybind_internal(id: KeybindId) -> Result<()> {
@@ -97,20 +99,19 @@ async fn xdg_input_thread() {
     }
 }
 
-async fn xdg_register_keybind(keybind: String, id: KeybindId) -> Result<()> {
-    let new_keybind = Keybind::from_string(keybind);
-    let mut keybinds = KEYBINDS.lock().unwrap();
-    keybinds.register_keybind(new_keybind.clone(), id);
-
-    let shortcut = NewShortcut::new(format!("{}", id), id.to_string())
-        .preferred_trigger(Some(new_keybind.to_string().as_str()));
-    let lock = XDG_STATE.lock().unwrap();
-    let state = lock.as_ref().unwrap();
-
-    state
-        .portal
-        .bind_shortcuts(&state.session, &[shortcut], None)
-        .await?;
+pub(crate) fn xdg_preregister_keybinds(actions: Vec<PreRegisterAction>) -> Result<()> {
+    futures::executor::block_on(async move {
+        let shortcuts: Vec<NewShortcut> = actions
+            .iter()
+            .map(|x| NewShortcut::new(format!("{}", x.id), x.name.clone()))
+            .collect();
+        let lock = XDG_STATE.lock().unwrap();
+        let state = lock.as_ref().unwrap();
+        state
+            .portal
+            .bind_shortcuts(&state.session, &shortcuts, None)
+            .await
+    })?;
     Ok(())
 }
 
@@ -186,7 +187,8 @@ fn uiohook_register_keybind(keybind: String, id: KeybindId) -> Result<()> {
 
 #[inline]
 pub(crate) fn is_wayland() -> bool {
-    env::var("WAYLAND_DISPLAY").is_ok()
+    env::var("XDG_SESSION_TYPE").is_ok_and(|x| x == "wayland".to_owned())
+        || env::var("WAYLAND_DISPLAY").is_ok()
 }
 
 #[inline]

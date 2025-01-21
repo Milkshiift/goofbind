@@ -2,16 +2,19 @@
 
 {
   packages = with pkgs; [
+    cmake
+    libclang
+    pkg-config
+
     xorg.libX11
     xorg.libXi
     xorg.libXtst
     xorg.libxcb
     libxkbcommon
     xorg.libxkbfile
-    cmake
-    libclang
-    pkg-config
+
     wayland
+
     ninja
     llvmPackages_latest.llvm
     cargo-xwin

@@ -1,6 +1,6 @@
 mod errors;
-#[cfg(all(feature = "node", not(test)))]
-pub mod js; // BREAKS TESTS
+#[cfg(feature = "node")]
+pub mod js;
 mod structs;
 
 #[cfg_attr(target_os = "linux", path = "linux.rs")]
@@ -27,7 +27,7 @@ pub fn unregister_keybind(id: KeybindId) {
 mod tests {
     use std::{sync::mpsc::channel, thread};
 
-    use crate::{register_keybind, start_keybinds, structs::KeybindTrigger};
+    use crate::{register_keybind, start_keybinds, structs::{KeybindTrigger, PreRegisterAction}};
     #[test]
     fn demo() {
         let (tx, rx) = channel::<KeybindTrigger>();
@@ -35,8 +35,28 @@ mod tests {
             start_keybinds(tx);
         });
         thread::sleep(std::time::Duration::from_secs(2));
-        register_keybind("shift+alt+m".to_string(), 1);
-        // register_keybind("SHIFT+CTRL+a".to_string(), 2);
+        #[cfg(target_os = "linux")]
+        if crate::is_wayland() || crate::use_xdg_on_x11() {
+            crate::xdg_preregister_keybinds(vec![
+                PreRegisterAction {
+                    id: 1,
+                    name: "Does a thing!".to_owned(),
+                },
+                PreRegisterAction {
+                    id: 2,
+                    name: "Does another thing!".to_owned(),
+                }
+            ]).unwrap();
+        } else {
+            register_keybind("shift+alt+m".to_string(), 1);
+            register_keybind("SHIFT+CTRL+a".to_string(), 2);
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            register_keybind("shift+alt+m".to_string(), 1);
+            register_keybind("SHIFT+CTRL+a".to_string(), 2);
+        }
+        
         loop {
             match rx.recv() {
                 Err(err) => {

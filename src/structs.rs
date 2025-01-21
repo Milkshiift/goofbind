@@ -2,6 +2,15 @@ use std::collections::HashMap;
 
 pub type KeybindId = u32;
 
+#[cfg(feature = "node")]
+use napi_derive::napi;
+
+#[cfg_attr(feature = "node", napi(object))]
+pub struct PreRegisterAction {
+    pub id: i32,
+    pub name: String,
+}
+
 #[derive(Default)]
 pub struct Keybinds {
     keybinds: HashMap<Keybind, KeybindId>,

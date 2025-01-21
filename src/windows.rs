@@ -17,8 +17,6 @@ static TX: OnceLock<Sender<KeybindTrigger>> = OnceLock::new();
 pub(crate) fn start_keybinds_internal(tx: Sender<KeybindTrigger>) -> Result<()> {
     TX.set(tx).unwrap();
 
-    // don't make a state with an xcb connection (state_new_from_device) so it only chooses the first layout
-    // TODO: if someone's first selected layout is not a latin based layout horrible things happen
     unsafe {
         hook_set_dispatch_proc(Some(dispatch_proc));
         if hook_run() != UIOHOOK_SUCCESS as i32 {
