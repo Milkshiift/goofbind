@@ -2,10 +2,11 @@ use ashpd::{
     desktop::{global_shortcuts::*, *},
     zbus::export::futures_util::StreamExt,
 };
+use futures::future::Either;
 use std::{
     cell::RefCell,
     env,
-    sync::{mpsc::Sender, LazyLock, Mutex, OnceLock}
+    sync::{mpsc::Sender, LazyLock, Mutex, OnceLock},
 };
 use uiohook_sys::{
     _event_type_EVENT_KEY_PRESSED, _uiohook_event, hook_run, hook_set_dispatch_proc,
@@ -81,37 +82,40 @@ async fn xdg_input_thread() {
         }
     };
     loop {
-        while let Some(action) = activated.next().await {
-            let local = action.shortcut_id().to_string();
-            TX.get()
+        match futures::future::select(activated.next(), deactivted.next()).await {
+            Either::Left((Some(activated), _)) => TX
+                .get()
                 .unwrap()
-                .send(KeybindTrigger::Pressed(local.parse().unwrap()))
+                .send(KeybindTrigger::Pressed(
+                    activated.shortcut_id().parse().unwrap(),
+                ))
+                .unwrap(),
+            Either::Right((Some(deactivated), _)) => TX
+                .get()
                 .unwrap()
-        }
-
-        while let Some(action) = deactivted.next().await {
-            let local = action.shortcut_id().to_string();
-            TX.get()
-                .unwrap()
-                .send(KeybindTrigger::Released(local.parse().unwrap()))
-                .unwrap()
+                .send(KeybindTrigger::Released(
+                    deactivated.shortcut_id().parse().unwrap(),
+                ))
+                .unwrap(),
+            _ => {
+                eprintln!("Unexpected output from GlobalShortcuts!");
+            }
         }
     }
 }
 
 pub(crate) fn xdg_preregister_keybinds(actions: Vec<PreRegisterAction>) -> Result<()> {
-    futures::executor::block_on(async move {
-        let shortcuts: Vec<NewShortcut> = actions
-            .iter()
-            .map(|x| NewShortcut::new(format!("{}", x.id), x.name.clone()))
-            .collect();
-        let lock = XDG_STATE.lock().unwrap();
-        let state = lock.as_ref().unwrap();
+    let shortcuts: Vec<NewShortcut> = actions
+        .iter()
+        .map(|x| NewShortcut::new(format!("{}", x.id), x.name.clone()))
+        .collect();
+    let lock = XDG_STATE.lock().unwrap();
+    let state = lock.as_ref().unwrap();
+    futures::executor::block_on(
         state
             .portal
-            .bind_shortcuts(&state.session, &shortcuts, None)
-            .await
-    })?;
+            .bind_shortcuts(&state.session, &shortcuts, None),
+    )?;
     Ok(())
 }
 
