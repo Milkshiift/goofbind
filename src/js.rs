@@ -18,14 +18,14 @@ pub fn start_keybinds(callback: JsFunction) -> Result<()> {
     thread::spawn(|| {
         crate::start_keybinds(tx);
     });
-let thread_function: ThreadsafeFunction<(u32, bool), ErrorStrategy::Fatal> = callback
-    .create_threadsafe_function(0, |ctx: ThreadSafeCallContext<(u32, bool)>| {
-        ctx.env.create_uint32(ctx.value.0).and_then(|y| {
-            ctx.env
-                .get_boolean(ctx.value.1)
-                .and_then(|x| (y, x).into_vec(ctx.env.raw()))
-        })
-    })?;
+    let thread_function: ThreadsafeFunction<(u32, bool), ErrorStrategy::Fatal> = callback
+        .create_threadsafe_function(0, |ctx: ThreadSafeCallContext<(u32, bool)>| {
+            ctx.env.create_uint32(ctx.value.0).and_then(|y| {
+                ctx.env
+                    .get_boolean(ctx.value.1)
+                    .and_then(|x| (y, x).into_vec(ctx.env.raw()))
+            })
+        })?;
     thread::spawn(move || loop {
         match rx.recv() {
             Err(err) => {

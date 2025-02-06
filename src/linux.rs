@@ -112,18 +112,16 @@ pub(crate) fn xdg_preregister_keybinds(actions: Vec<PreRegisterAction>) -> Resul
         .iter()
         .map(|x| NewShortcut::new(format!("{}", x.id), x.name.clone()))
         .collect();
-    loop {
-        let lock = XDG_STATE.lock().unwrap();
-        if let Some(state) = lock.as_ref() {
-            futures::executor::block_on(state.portal.bind_shortcuts(
-                &state.session,
-                &shortcuts,
-                None,
-            ))?;
-            break;
-        } else {
-            continue;
-        }
+    let lock = XDG_STATE.lock().unwrap();
+    if let Some(state) = lock.as_ref() {
+
+        futures::executor::block_on(
+            state
+                .portal
+                .bind_shortcuts(&state.session, &shortcuts, None),
+        )?;
+    } else {
+        eprintln!("No GlobalShortcuts state was found! skipping preregistery.");
     }
     Ok(())
 }

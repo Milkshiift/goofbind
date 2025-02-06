@@ -34,7 +34,7 @@ mod tests {
         thread::spawn(|| {
             start_keybinds(tx);
         });
-        // thread::sleep(std::time::Duration::from_secs(2));
+        thread::sleep(std::time::Duration::from_secs(2));
         #[cfg(target_os = "linux")]
         if crate::is_wayland() || crate::use_xdg_on_x11() {
             crate::xdg_preregister_keybinds(vec![
