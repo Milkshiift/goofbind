@@ -9,8 +9,8 @@ use std::{
     sync::{mpsc::Sender, LazyLock, Mutex, OnceLock},
 };
 use uiohook_sys::{
-    _event_type_EVENT_KEY_PRESSED, _uiohook_event, hook_run, hook_set_dispatch_proc,
-    UIOHOOK_SUCCESS,
+    _event_type_EVENT_KEY_PRESSED, _event_type_EVENT_KEY_RELEASED, _uiohook_event, hook_run,
+    hook_set_dispatch_proc, UIOHOOK_SUCCESS,
 };
 use xcb::Extension;
 use xkbcommon::xkb::{self, State};
@@ -22,6 +22,8 @@ use crate::{
 };
 
 static KEYBINDS: LazyLock<Mutex<Keybinds>> = LazyLock::new(|| Mutex::new(Keybinds::default()));
+static CURR_DOWN: LazyLock<Mutex<Option<(Keybind, KeybindId)>>> =
+    LazyLock::new(|| Mutex::new(None));
 static TX: OnceLock<Sender<KeybindTrigger>> = OnceLock::new();
 
 static XDG_STATE: LazyLock<Mutex<Option<XDGState>>> = LazyLock::new(|| Mutex::new(None));
@@ -58,11 +60,12 @@ pub(crate) fn unregister_keybind_internal(id: KeybindId) -> Result<()> {
 }
 
 async fn xdg_start_keybinds() -> Result<()> {
+    let mut state = XDG_STATE.lock().unwrap();
+
     let portal = GlobalShortcuts::new().await?;
     let session = portal.create_session().await?;
 
-    let mut state = XDG_STATE.lock().unwrap();
-    let _ = state.replace(XDGState { portal, session });
+    state.replace(XDGState { portal, session });
     drop(state);
 
     xdg_input_thread().await;
@@ -109,13 +112,19 @@ pub(crate) fn xdg_preregister_keybinds(actions: Vec<PreRegisterAction>) -> Resul
         .iter()
         .map(|x| NewShortcut::new(format!("{}", x.id), x.name.clone()))
         .collect();
-    let lock = XDG_STATE.lock().unwrap();
-    let state = lock.as_ref().unwrap();
-    futures::executor::block_on(
-        state
-            .portal
-            .bind_shortcuts(&state.session, &shortcuts, None),
-    )?;
+    loop {
+        let lock = XDG_STATE.lock().unwrap();
+        if let Some(state) = lock.as_ref() {
+            futures::executor::block_on(state.portal.bind_shortcuts(
+                &state.session,
+                &shortcuts,
+                None,
+            ))?;
+            break;
+        } else {
+            continue;
+        }
+    }
     Ok(())
 }
 
@@ -137,14 +146,36 @@ pub unsafe extern "C" fn uiohook_dispatch_proc(event_ref: *mut _uiohook_event) {
                     ctrl,
                     character: if !key.is_empty() { Some(key) } else { None },
                 };
+                let mut down = CURR_DOWN.lock().unwrap();
+                if let Some((down_keybind, id)) = &*down {
+                    if *down_keybind == keybind {
+                        return; // prevent repeating Pressed triggers
+                    }
+                    TX.get()
+                        .unwrap()
+                        .send(KeybindTrigger::Released(*id))
+                        .unwrap();
+                    down.take();
+                }
+
                 let keybinds = KEYBINDS.lock();
-                if let Some(id) = keybinds.unwrap().get_keybind_id(keybind) {
+                if let Some(id) = keybinds.unwrap().get_keybind_id(&keybind) {
                     TX.get().unwrap().send(KeybindTrigger::Pressed(id)).unwrap();
+                    down.replace((keybind, id));
                 }
             } else {
                 panic!("The state is gone???? how????");
             }
         });
+    } else if event.type_ == _event_type_EVENT_KEY_RELEASED {
+        let mut down = CURR_DOWN.lock().unwrap();
+        if let Some((_, id)) = &*down {
+            TX.get()
+                .unwrap()
+                .send(KeybindTrigger::Released(*id))
+                .unwrap();
+            down.take();
+        }
     }
 }
 

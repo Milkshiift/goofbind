@@ -79,7 +79,7 @@ impl Keybinds {
     pub fn unregister_keybind(&mut self, id: KeybindId) {
         self.keybinds.retain(|_, x| *x != id);
     }
-    pub fn get_keybind_id(&self, keybind: Keybind) -> Option<KeybindId> {
-        self.keybinds.get(&keybind).copied()
+    pub fn get_keybind_id(&self, keybind: &Keybind) -> Option<KeybindId> {
+        self.keybinds.get(keybind).copied()
     }
 }

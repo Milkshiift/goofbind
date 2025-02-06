@@ -4,14 +4,16 @@ use std::sync::{mpsc::Sender, Mutex};
 use std::sync::{LazyLock, OnceLock};
 
 use uiohook_sys::{
-    _event_type_EVENT_KEY_PRESSED, _uiohook_event, hook_run, hook_set_dispatch_proc,
-    UIOHOOK_SUCCESS,
+    _event_type_EVENT_KEY_PRESSED, _event_type_EVENT_KEY_RELEASED, _uiohook_event, hook_run,
+    hook_set_dispatch_proc, UIOHOOK_SUCCESS,
 };
 
 use crate::errors::{Result, VenbindError};
 use crate::structs::{Keybind, KeybindId, KeybindTrigger, Keybinds};
 
 static KEYBINDS: LazyLock<Mutex<Keybinds>> = LazyLock::new(|| Mutex::new(Keybinds::default()));
+static CURR_DOWN: LazyLock<Mutex<Option<(Keybind, KeybindId)>>> =
+    LazyLock::new(|| Mutex::new(None));
 static TX: OnceLock<Sender<KeybindTrigger>> = OnceLock::new();
 
 pub(crate) fn start_keybinds_internal(tx: Sender<KeybindTrigger>) -> Result<()> {
@@ -55,10 +57,31 @@ pub unsafe extern "C" fn dispatch_proc(event_ref: *mut _uiohook_event) {
                 None
             },
         };
+        let mut down = CURR_DOWN.lock().unwrap();
+        if let Some((down_keybind, id)) = &*down {
+            if *down_keybind == keybind {
+                return; // prevent repeating Pressed triggers
+            }
+            TX.get()
+                .unwrap()
+                .send(KeybindTrigger::Released(*id))
+                .unwrap();
+            down.take();
+        }
 
         let keybinds = KEYBINDS.lock();
-        if let Some(id) = keybinds.unwrap().get_keybind_id(keybind) {
+        if let Some(id) = keybinds.unwrap().get_keybind_id(&keybind) {
             TX.get().unwrap().send(KeybindTrigger::Pressed(id)).unwrap();
+            down.replace((keybind, id));
+        }
+    } else if event.type_ == _event_type_EVENT_KEY_RELEASED {
+        let mut down = CURR_DOWN.lock().unwrap();
+        if let Some((_, id)) = &*down {
+            TX.get()
+                .unwrap()
+                .send(KeybindTrigger::Released(*id))
+                .unwrap();
+            down.take();
         }
     }
 }

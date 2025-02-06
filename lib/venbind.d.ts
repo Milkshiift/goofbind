@@ -1,5 +1,5 @@
 export class Venbind {
-  startKeybinds(callback: (err: null | Error, id: number) => void): void;
+  startKeybinds(callback: (id: number, keyup: boolean) => void): void;
   registerKeybind(keybind: string, keybindId: number): void;
   unregisterKeybind(keybindId: number): void;
   preregisterKeybinds(actions: PreRegisterAction[]): void;

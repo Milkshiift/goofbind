@@ -2,7 +2,9 @@ use std::{sync::mpsc::channel, thread};
 
 use napi::{
     bindgen_prelude::*,
-    threadsafe_function::{ErrorStrategy, ThreadsafeFunction, ThreadsafeFunctionCallMode},
+    threadsafe_function::{
+        ErrorStrategy, ThreadSafeCallContext, ThreadsafeFunction, ThreadsafeFunctionCallMode,
+    },
 };
 use napi_derive::napi;
 
@@ -10,25 +12,30 @@ use crate::structs::{KeybindId, KeybindTrigger};
 
 pub use crate::structs::PreRegisterAction;
 
-#[napi(ts_args_type = "callback: (err: null | Error, id: number) => void")]
+#[napi(ts_args_type = "callback: (id: number, keyup: boolean) => void")]
 pub fn start_keybinds(callback: JsFunction) -> Result<()> {
     let (tx, rx) = channel::<KeybindTrigger>();
     thread::spawn(|| {
         crate::start_keybinds(tx);
     });
-
-    let thread_function: ThreadsafeFunction<u32, ErrorStrategy::Fatal> = callback
-        .create_threadsafe_function(0, |ctx| ctx.env.create_uint32(ctx.value).map(|v| vec![v]))?;
+let thread_function: ThreadsafeFunction<(u32, bool), ErrorStrategy::Fatal> = callback
+    .create_threadsafe_function(0, |ctx: ThreadSafeCallContext<(u32, bool)>| {
+        ctx.env.create_uint32(ctx.value.0).and_then(|y| {
+            ctx.env
+                .get_boolean(ctx.value.1)
+                .and_then(|x| (y, x).into_vec(ctx.env.raw()))
+        })
+    })?;
     thread::spawn(move || loop {
         match rx.recv() {
             Err(err) => {
                 panic!("{err}");
             }
             Ok(KeybindTrigger::Pressed(x)) => {
-                thread_function.call(x, ThreadsafeFunctionCallMode::Blocking);
+                thread_function.call((x, false), ThreadsafeFunctionCallMode::Blocking);
             }
             Ok(KeybindTrigger::Released(x)) => {
-                println!("released {}", x);
+                thread_function.call((x, true), ThreadsafeFunctionCallMode::Blocking);
             }
         }
     });
@@ -47,7 +54,9 @@ pub fn unregister_keybind(#[napi(ts_arg_type = "number")] id: KeybindId) {
 }
 
 #[napi]
-pub fn preregister_keybinds(#[napi(ts_arg_type = "PreRegisterAction[]")] actions: Vec<PreRegisterAction>) {
+pub fn preregister_keybinds(
+    #[napi(ts_arg_type = "PreRegisterAction[]")] actions: Vec<PreRegisterAction>,
+) {
     #[cfg(target_os = "linux")]
     {
         crate::platform::xdg_preregister_keybinds(actions).unwrap();
