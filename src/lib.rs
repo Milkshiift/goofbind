@@ -9,34 +9,38 @@ mod platform;
 
 use std::sync::mpsc::Sender;
 
+use errors::Result;
 use platform::*;
 use structs::{KeybindId, KeybindTrigger};
 
-pub fn start_keybinds(tx: Sender<KeybindTrigger>) {
-    start_keybinds_internal(tx).unwrap();
+pub fn start_keybinds(tx: Sender<KeybindTrigger>) -> Result<()> {
+    start_keybinds_internal(tx)
 }
 
-pub fn register_keybind(keybind: String, id: KeybindId) {
-    register_keybind_internal(keybind, id).unwrap();
+pub fn register_keybind(keybind: String, id: KeybindId) -> Result<()> {
+    register_keybind_internal(keybind, id)
 }
-pub fn unregister_keybind(id: KeybindId) {
-    unregister_keybind_internal(id).unwrap();
+pub fn unregister_keybind(id: KeybindId) -> Result<()> {
+    unregister_keybind_internal(id)
 }
 
 #[cfg(test)]
 mod tests {
     use std::{sync::mpsc::channel, thread};
 
-    use crate::{register_keybind, start_keybinds, structs::{KeybindTrigger, PreRegisterAction}};
+    use crate::{
+        register_keybind, start_keybinds,
+        structs::{KeybindTrigger, PreRegisterAction},
+    };
     #[test]
     fn demo() {
         let (tx, rx) = channel::<KeybindTrigger>();
         thread::spawn(|| {
-            start_keybinds(tx);
+            start_keybinds(tx).unwrap();
         });
         thread::sleep(std::time::Duration::from_secs(2));
         #[cfg(target_os = "linux")]
-        if crate::is_wayland() || crate::use_xdg_on_x11() {
+        if crate::using_xdg() {
             crate::xdg_preregister_keybinds(vec![
                 PreRegisterAction {
                     id: 1,
@@ -45,18 +49,19 @@ mod tests {
                 PreRegisterAction {
                     id: 2,
                     name: "Does another thing!".to_owned(),
-                }
-            ]).unwrap();
+                },
+            ])
+            .unwrap();
         } else {
-            register_keybind("shift+alt+m".to_string(), 1);
-            register_keybind("SHIFT+CTRL+a".to_string(), 2);
+            register_keybind("shift+alt+m".to_string(), 1).unwrap();
+            register_keybind("SHIFT+CTRL+a".to_string(), 2).unwrap();
         }
         #[cfg(not(target_os = "linux"))]
         {
-            register_keybind("shift+alt+m".to_string(), 1);
-            register_keybind("SHIFT+CTRL+a".to_string(), 2);
+            register_keybind("shift+alt+m".to_string(), 1).unwrap();
+            register_keybind("SHIFT+CTRL+a".to_string(), 2).unwrap();
         }
-        
+
         loop {
             match rx.recv() {
                 Err(err) => {

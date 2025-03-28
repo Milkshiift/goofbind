@@ -39,7 +39,7 @@ struct XDGState<'a> {
 
 pub(crate) fn start_keybinds_internal(tx: Sender<KeybindTrigger>) -> Result<()> {
     TX.set(tx).unwrap();
-    if is_wayland() || use_xdg_on_x11() {
+    if using_xdg() {
         futures::executor::block_on(xdg_start_keybinds())
     } else {
         uiohook_start_keybinds()
@@ -47,8 +47,8 @@ pub(crate) fn start_keybinds_internal(tx: Sender<KeybindTrigger>) -> Result<()> 
 }
 
 pub(crate) fn register_keybind_internal(keybind: String, id: KeybindId) -> Result<()> {
-    if is_wayland() || use_xdg_on_x11() {
-        panic!("Keybinds should be preregistered on wayland!");
+    if using_xdg() {
+        return Err(VenbindError::UnsupportedOnXdg);
     }
     uiohook_register_keybind(keybind, id)
 }
@@ -68,17 +68,17 @@ async fn xdg_start_keybinds() -> Result<()> {
     state.replace(XDGState { portal, session });
     drop(state);
 
-    xdg_input_thread().await;
+    xdg_input_thread().await?;
 
     Ok(())
 }
 
-async fn xdg_input_thread() {
+async fn xdg_input_thread() -> Result<()> {
     let (mut activated, mut deactivted) = {
         let state = XDG_STATE.lock().unwrap();
         if let Some(state) = state.as_ref() {
-            let activated = state.portal.receive_activated().await.unwrap();
-            let deactivated = state.portal.receive_deactivated().await.unwrap();
+            let activated = state.portal.receive_activated().await?;
+            let deactivated = state.portal.receive_deactivated().await?;
             (activated, deactivated)
         } else {
             panic!("This Thread should not be active no XDG state");
@@ -86,20 +86,12 @@ async fn xdg_input_thread() {
     };
     loop {
         match futures::future::select(activated.next(), deactivted.next()).await {
-            Either::Left((Some(activated), _)) => TX
-                .get()
-                .unwrap()
-                .send(KeybindTrigger::Pressed(
-                    activated.shortcut_id().parse().unwrap(),
-                ))
-                .unwrap(),
-            Either::Right((Some(deactivated), _)) => TX
-                .get()
-                .unwrap()
-                .send(KeybindTrigger::Released(
-                    deactivated.shortcut_id().parse().unwrap(),
-                ))
-                .unwrap(),
+            Either::Left((Some(activated), _)) => TX.get().unwrap().send(
+                KeybindTrigger::Pressed(activated.shortcut_id().parse().unwrap()),
+            )?,
+            Either::Right((Some(deactivated), _)) => TX.get().unwrap().send(
+                KeybindTrigger::Released(deactivated.shortcut_id().parse().unwrap()),
+            )?,
             _ => {
                 eprintln!("Unexpected output from GlobalShortcuts!");
             }
@@ -108,18 +100,29 @@ async fn xdg_input_thread() {
 }
 
 pub(crate) fn xdg_preregister_keybinds(actions: Vec<PreRegisterAction>) -> Result<()> {
+    if !using_xdg() {
+        return Err(VenbindError::UnsupportedOnXdg);
+    }
     let shortcuts: Vec<NewShortcut> = actions
         .iter()
-        .map(|x| NewShortcut::new(format!("{}", x.id), x.name.clone()))
+        .map(|x| NewShortcut::new(format!("{}", x.id), &x.name))
         .collect();
     let lock = XDG_STATE.lock().unwrap();
     if let Some(state) = lock.as_ref() {
+        let listshortcuts =
+            futures::executor::block_on(state.portal.list_shortcuts(&state.session))?.response()?;
+        let curr_shortcuts = listshortcuts.shortcuts();
 
-        futures::executor::block_on(
-            state
-                .portal
-                .bind_shortcuts(&state.session, &shortcuts, None),
-        )?;
+        if !actions
+            .iter()
+            .all(|x| curr_shortcuts.iter().any(|y| y.id() == format!("{}", x.id)))
+        {
+            futures::executor::block_on(state.portal.bind_shortcuts(
+                &state.session,
+                &shortcuts,
+                None,
+            ))?;
+        }
     } else {
         eprintln!("No GlobalShortcuts state was found! skipping preregistery.");
     }
@@ -131,38 +134,35 @@ pub unsafe extern "C" fn uiohook_dispatch_proc(event_ref: *mut _uiohook_event) {
     let event = &*event_ref;
     if event.type_ == _event_type_EVENT_KEY_PRESSED {
         XKBCOMMON_STATE.with(|state| {
-            if let Some(state) = &*state.borrow() {
-                let keycode =
-                    uiohook_sys::platform::scancode_to_keycode(event.data.keyboard.keycode);
-                let key = state.key_get_utf8(keycode.into());
-                let shift = event.mask & uiohook_sys::MASK_SHIFT as u16 != 0;
-                let alt = event.mask & uiohook_sys::MASK_ALT as u16 != 0;
-                let ctrl = event.mask & uiohook_sys::MASK_CTRL as u16 != 0;
-                let keybind = Keybind {
-                    shift,
-                    alt,
-                    ctrl,
-                    character: if !key.is_empty() { Some(key) } else { None },
-                };
-                let mut down = CURR_DOWN.lock().unwrap();
-                if let Some((down_keybind, id)) = &*down {
-                    if *down_keybind == keybind {
-                        return; // prevent repeating Pressed triggers
-                    }
-                    TX.get()
-                        .unwrap()
-                        .send(KeybindTrigger::Released(*id))
-                        .unwrap();
-                    down.take();
+            let state_borrow = state.borrow();
+            let state = state_borrow.as_ref().unwrap();
+            let keycode = uiohook_sys::platform::scancode_to_keycode(event.data.keyboard.keycode);
+            let key = state.key_get_utf8(keycode.into());
+            let shift = event.mask & uiohook_sys::MASK_SHIFT as u16 != 0;
+            let alt = event.mask & uiohook_sys::MASK_ALT as u16 != 0;
+            let ctrl = event.mask & uiohook_sys::MASK_CTRL as u16 != 0;
+            let keybind = Keybind {
+                shift,
+                alt,
+                ctrl,
+                character: if !key.is_empty() { Some(key) } else { None },
+            };
+            let mut down = CURR_DOWN.lock().unwrap();
+            if let Some((down_keybind, id)) = &*down {
+                if *down_keybind == keybind {
+                    return; // prevent repeating Pressed triggers
                 }
+                TX.get()
+                    .unwrap()
+                    .send(KeybindTrigger::Released(*id))
+                    .unwrap();
+                down.take();
+            }
 
-                let keybinds = KEYBINDS.lock();
-                if let Some(id) = keybinds.unwrap().get_keybind_id(&keybind) {
-                    TX.get().unwrap().send(KeybindTrigger::Pressed(id)).unwrap();
-                    down.replace((keybind, id));
-                }
-            } else {
-                panic!("The state is gone???? how????");
+            let keybinds = KEYBINDS.lock();
+            if let Some(id) = keybinds.unwrap().get_keybind_id(&keybind) {
+                TX.get().unwrap().send(KeybindTrigger::Pressed(id)).unwrap();
+                down.replace((keybind, id));
             }
         });
     } else if event.type_ == _event_type_EVENT_KEY_RELEASED {
@@ -219,12 +219,8 @@ fn uiohook_register_keybind(keybind: String, id: KeybindId) -> Result<()> {
 }
 
 #[inline]
-pub(crate) fn is_wayland() -> bool {
+pub(crate) fn using_xdg() -> bool {
     env::var("XDG_SESSION_TYPE").is_ok_and(|x| x == "wayland".to_owned())
         || env::var("WAYLAND_DISPLAY").is_ok()
-}
-
-#[inline]
-pub(crate) fn use_xdg_on_x11() -> bool {
-    env::var("VENBIND_USE_XDG_PORTAL").is_ok()
+        || env::var("VENBIND_USE_XDG_PORTAL").is_ok()
 }
