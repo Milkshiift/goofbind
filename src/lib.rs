@@ -13,8 +13,8 @@ use errors::Result;
 use platform::*;
 use structs::{KeybindId, KeybindTrigger};
 
-pub fn start_keybinds(tx: Sender<KeybindTrigger>) -> Result<()> {
-    start_keybinds_internal(tx)
+pub fn start_keybinds(tx: Sender<KeybindTrigger>, app_id: Option<String>) -> Result<()> {
+    start_keybinds_internal(tx, app_id)
 }
 
 pub fn register_keybind(keybind: String, id: KeybindId) -> Result<()> {
@@ -36,18 +36,18 @@ mod tests {
     fn demo() {
         let (tx, rx) = channel::<KeybindTrigger>();
         thread::spawn(|| {
-            start_keybinds(tx).unwrap();
+            start_keybinds(tx, None).unwrap();
         });
         thread::sleep(std::time::Duration::from_secs(2));
         #[cfg(target_os = "linux")]
         if crate::using_xdg() {
             crate::xdg_preregister_keybinds(vec![
                 PreRegisterAction {
-                    id: 1,
+                    id: "1".to_owned(),
                     name: "Does a thing!".to_owned(),
                 },
                 PreRegisterAction {
-                    id: 2,
+                    id: "2".to_owned(),
                     name: "Does another thing!".to_owned(),
                 },
             ])

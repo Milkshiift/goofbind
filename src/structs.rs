@@ -7,7 +7,7 @@ use napi_derive::napi;
 
 #[cfg_attr(feature = "node", napi(object))]
 pub struct PreRegisterAction {
-    pub id: i32,
+    pub id: String,
     pub name: String,
 }
 

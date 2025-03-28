@@ -1,11 +1,14 @@
 use ashpd::{
     desktop::{global_shortcuts::*, *},
+    register_host_app,
     zbus::export::futures_util::StreamExt,
+    AppID,
 };
-use futures::future::Either;
+use futures::{executor::block_on, future::Either};
 use std::{
     cell::RefCell,
     env,
+    str::FromStr,
     sync::{mpsc::Sender, LazyLock, Mutex, OnceLock},
 };
 use uiohook_sys::{
@@ -37,10 +40,10 @@ struct XDGState<'a> {
     session: Session<'a, ashpd::desktop::global_shortcuts::GlobalShortcuts<'a>>,
 }
 
-pub(crate) fn start_keybinds_internal(tx: Sender<KeybindTrigger>) -> Result<()> {
+pub(crate) fn start_keybinds_internal(tx: Sender<KeybindTrigger>, app_id: Option<String>) -> Result<()> {
     TX.set(tx).unwrap();
     if using_xdg() {
-        futures::executor::block_on(xdg_start_keybinds())
+        block_on(xdg_start_keybinds(app_id))
     } else {
         uiohook_start_keybinds()
     }
@@ -59,9 +62,12 @@ pub(crate) fn unregister_keybind_internal(id: KeybindId) -> Result<()> {
     Ok(())
 }
 
-async fn xdg_start_keybinds() -> Result<()> {
+async fn xdg_start_keybinds(app_id: Option<String>) -> Result<()> {
+    if let Some(app_id) = app_id {
+        let _ = register_host_app(AppID::from_str(&app_id).unwrap())
+            .await?;
+    }
     let mut state = XDG_STATE.lock().unwrap();
-
     let portal = GlobalShortcuts::new().await?;
     let session = portal.create_session().await?;
 
@@ -105,23 +111,22 @@ pub(crate) fn xdg_preregister_keybinds(actions: Vec<PreRegisterAction>) -> Resul
     }
     let shortcuts: Vec<NewShortcut> = actions
         .iter()
-        .map(|x| NewShortcut::new(format!("{}", x.id), &x.name))
+        .map(|x| NewShortcut::new(&x.id, &x.name))
         .collect();
     let lock = XDG_STATE.lock().unwrap();
     if let Some(state) = lock.as_ref() {
-        let listshortcuts =
-            futures::executor::block_on(state.portal.list_shortcuts(&state.session))?.response()?;
+        let listshortcuts = block_on(state.portal.list_shortcuts(&state.session))?.response()?;
         let curr_shortcuts = listshortcuts.shortcuts();
 
         if !actions
             .iter()
-            .all(|x| curr_shortcuts.iter().any(|y| y.id() == format!("{}", x.id)))
+            .all(|x| curr_shortcuts.iter().any(|y| y.id() == x.id))
         {
-            futures::executor::block_on(state.portal.bind_shortcuts(
-                &state.session,
-                &shortcuts,
-                None,
-            ))?;
+            block_on(
+                state
+                    .portal
+                    .bind_shortcuts(&state.session, &shortcuts, None),
+            )?;
         }
     } else {
         eprintln!("No GlobalShortcuts state was found! skipping preregistery.");

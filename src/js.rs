@@ -28,11 +28,11 @@ macro_rules! pass_to_js_error_handle {
     };
 }
 
-#[napi(ts_args_type = "callback: (id: number, keyup: boolean) => void")]
-pub fn start_keybinds(callback: JsFunction) -> Result<()> {
+#[napi(ts_args_type = "callback: (id: number, keyup: boolean) => void, app_id: string | null")]
+pub fn start_keybinds(callback: JsFunction, app_id: Option<String>) -> Result<()> {
     let (tx, rx) = channel::<KeybindTrigger>();
     thread::spawn(|| {
-        pass_to_js_error_handle!(crate::start_keybinds(tx));
+        pass_to_js_error_handle!(crate::start_keybinds(tx, app_id));
     });
     let thread_function: ThreadsafeFunction<(u32, bool), ErrorStrategy::Fatal> = callback
         .create_threadsafe_function(0, |ctx: ThreadSafeCallContext<(u32, bool)>| {

@@ -16,7 +16,7 @@ static CURR_DOWN: LazyLock<Mutex<Option<(Keybind, KeybindId)>>> =
     LazyLock::new(|| Mutex::new(None));
 static TX: OnceLock<Sender<KeybindTrigger>> = OnceLock::new();
 
-pub(crate) fn start_keybinds_internal(tx: Sender<KeybindTrigger>) -> Result<()> {
+pub(crate) fn start_keybinds_internal(tx: Sender<KeybindTrigger>, _: Option<String>) -> Result<()> {
     TX.set(tx).unwrap();
 
     unsafe {
