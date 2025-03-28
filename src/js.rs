@@ -61,11 +61,7 @@ pub fn start_keybinds(callback: JsFunction) -> Result<()> {
 
 #[napi]
 pub fn register_keybind(keybind: String, #[napi(ts_arg_type = "number")] id: KeybindId) {
-    let _ = crate::register_keybind(keybind, id).inspect_err(|e| {
-        if let Some(err_func) = &*JS_ERROR_HANDLE.lock().unwrap() {
-            err_func.call(format!("{e}"), ThreadsafeFunctionCallMode::Blocking);
-        }
-    });
+    pass_to_js_error_handle!(crate::register_keybind(keybind, id));
 }
 
 #[napi]
