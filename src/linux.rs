@@ -93,10 +93,10 @@ async fn xdg_input_thread() -> Result<()> {
     loop {
         match futures::future::select(activated.next(), deactivted.next()).await {
             Either::Left((Some(activated), _)) => TX.get().unwrap().send(
-                KeybindTrigger::Pressed(activated.shortcut_id().parse().unwrap()),
+                KeybindTrigger::Pressed(activated.shortcut_id().to_owned()),
             )?,
             Either::Right((Some(deactivated), _)) => TX.get().unwrap().send(
-                KeybindTrigger::Released(deactivated.shortcut_id().parse().unwrap()),
+                KeybindTrigger::Released(deactivated.shortcut_id().to_owned()),
             )?,
             _ => {
                 eprintln!("Unexpected output from GlobalShortcuts!");
@@ -159,14 +159,14 @@ pub unsafe extern "C" fn uiohook_dispatch_proc(event_ref: *mut _uiohook_event) {
                 }
                 TX.get()
                     .unwrap()
-                    .send(KeybindTrigger::Released(*id))
+                    .send(KeybindTrigger::Released(id.clone()))
                     .unwrap();
                 down.take();
             }
 
             let keybinds = KEYBINDS.lock();
             if let Some(id) = keybinds.unwrap().get_keybind_id(&keybind) {
-                TX.get().unwrap().send(KeybindTrigger::Pressed(id)).unwrap();
+                TX.get().unwrap().send(KeybindTrigger::Pressed(id.clone())).unwrap();
                 down.replace((keybind, id));
             }
         });
@@ -175,7 +175,7 @@ pub unsafe extern "C" fn uiohook_dispatch_proc(event_ref: *mut _uiohook_event) {
         if let Some((_, id)) = &*down {
             TX.get()
                 .unwrap()
-                .send(KeybindTrigger::Released(*id))
+                .send(KeybindTrigger::Released(id.clone()))
                 .unwrap();
             down.take();
         }

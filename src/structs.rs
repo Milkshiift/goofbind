@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-pub type KeybindId = u32;
+pub type KeybindId = String;
 
 #[cfg(feature = "node")]
 use napi_derive::napi;
@@ -80,6 +80,6 @@ impl Keybinds {
         self.keybinds.retain(|_, x| *x != id);
     }
     pub fn get_keybind_id(&self, keybind: &Keybind) -> Option<KeybindId> {
-        self.keybinds.get(keybind).copied()
+        self.keybinds.get(keybind).map(|x| x.clone())
     }
 }

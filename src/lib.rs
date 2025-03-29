@@ -53,8 +53,8 @@ mod tests {
             ])
             .unwrap();
         } else {
-            register_keybind("shift+alt+m".to_string(), 1).unwrap();
-            register_keybind("SHIFT+CTRL+a".to_string(), 2).unwrap();
+            register_keybind("shift+alt+m".to_string(), "1".to_string()).unwrap();
+            register_keybind("SHIFT+CTRL+a".to_string(), "2".to_string()).unwrap();
         }
         #[cfg(not(target_os = "linux"))]
         {

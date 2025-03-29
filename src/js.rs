@@ -28,15 +28,15 @@ macro_rules! pass_to_js_error_handle {
     };
 }
 
-#[napi(ts_args_type = "callback: (id: number, keyup: boolean) => void, app_id: string | null")]
+#[napi(ts_args_type = "callback: (id: string, keyup: boolean) => void, app_id: string | null")]
 pub fn start_keybinds(callback: JsFunction, app_id: Option<String>) -> Result<()> {
     let (tx, rx) = channel::<KeybindTrigger>();
     thread::spawn(|| {
         pass_to_js_error_handle!(crate::start_keybinds(tx, app_id));
     });
-    let thread_function: ThreadsafeFunction<(u32, bool), ErrorStrategy::Fatal> = callback
-        .create_threadsafe_function(0, |ctx: ThreadSafeCallContext<(u32, bool)>| {
-            ctx.env.create_uint32(ctx.value.0).and_then(|y| {
+    let thread_function: ThreadsafeFunction<(String, bool), ErrorStrategy::Fatal> = callback
+        .create_threadsafe_function(0, |ctx: ThreadSafeCallContext<(String, bool)>| {
+            ctx.env.create_string_from_std(ctx.value.0).and_then(|y| {
                 ctx.env
                     .get_boolean(ctx.value.1)
                     .and_then(|x| (y, x).into_vec(ctx.env.raw()))
@@ -60,12 +60,12 @@ pub fn start_keybinds(callback: JsFunction, app_id: Option<String>) -> Result<()
 }
 
 #[napi]
-pub fn register_keybind(keybind: String, #[napi(ts_arg_type = "number")] id: KeybindId) {
+pub fn register_keybind(keybind: String, #[napi(ts_arg_type = "string")] id: KeybindId) {
     pass_to_js_error_handle!(crate::register_keybind(keybind, id));
 }
 
 #[napi]
-pub fn unregister_keybind(#[napi(ts_arg_type = "number")] id: KeybindId) {
+pub fn unregister_keybind(#[napi(ts_arg_type = "string")] id: KeybindId) {
     pass_to_js_error_handle!(crate::unregister_keybind(id));
 }
 

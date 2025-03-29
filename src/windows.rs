@@ -64,14 +64,14 @@ pub unsafe extern "C" fn dispatch_proc(event_ref: *mut _uiohook_event) {
             }
             TX.get()
                 .unwrap()
-                .send(KeybindTrigger::Released(*id))
+                .send(KeybindTrigger::Released(id.clone()))
                 .unwrap();
             down.take();
         }
 
         let keybinds = KEYBINDS.lock();
         if let Some(id) = keybinds.unwrap().get_keybind_id(&keybind) {
-            TX.get().unwrap().send(KeybindTrigger::Pressed(id)).unwrap();
+            TX.get().unwrap().send(KeybindTrigger::Pressed(id.clone())).unwrap();
             down.replace((keybind, id));
         }
     } else if event.type_ == _event_type_EVENT_KEY_RELEASED {
@@ -79,7 +79,7 @@ pub unsafe extern "C" fn dispatch_proc(event_ref: *mut _uiohook_event) {
         if let Some((_, id)) = &*down {
             TX.get()
                 .unwrap()
-                .send(KeybindTrigger::Released(*id))
+                .send(KeybindTrigger::Released(id.clone()))
                 .unwrap();
             down.take();
         }
