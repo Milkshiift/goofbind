@@ -40,7 +40,10 @@ struct XDGState<'a> {
     session: Session<'a, ashpd::desktop::global_shortcuts::GlobalShortcuts<'a>>,
 }
 
-pub(crate) fn start_keybinds_internal(tx: Sender<KeybindTrigger>, app_id: Option<String>) -> Result<()> {
+pub(crate) fn start_keybinds_internal(
+    tx: Sender<KeybindTrigger>,
+    app_id: Option<String>,
+) -> Result<()> {
     TX.set(tx).unwrap();
     if using_xdg() {
         block_on(xdg_start_keybinds(app_id))
@@ -64,8 +67,9 @@ pub(crate) fn unregister_keybind_internal(id: KeybindId) -> Result<()> {
 
 async fn xdg_start_keybinds(app_id: Option<String>) -> Result<()> {
     if let Some(app_id) = app_id {
-        let _ = register_host_app(AppID::from_str(&app_id).unwrap())
-            .await?;
+        if let Err(err) = register_host_app(AppID::from_str(&app_id).unwrap()).await {
+            eprintln!("Couldn't use registry (chances are your version of xdg-desktop-portal is old): {err}")
+        }
     }
     let mut state = XDG_STATE.lock().unwrap();
     let portal = GlobalShortcuts::new().await?;
@@ -92,9 +96,10 @@ async fn xdg_input_thread() -> Result<()> {
     };
     loop {
         match futures::future::select(activated.next(), deactivted.next()).await {
-            Either::Left((Some(activated), _)) => TX.get().unwrap().send(
-                KeybindTrigger::Pressed(activated.shortcut_id().to_owned()),
-            )?,
+            Either::Left((Some(activated), _)) => TX
+                .get()
+                .unwrap()
+                .send(KeybindTrigger::Pressed(activated.shortcut_id().to_owned()))?,
             Either::Right((Some(deactivated), _)) => TX.get().unwrap().send(
                 KeybindTrigger::Released(deactivated.shortcut_id().to_owned()),
             )?,
@@ -166,7 +171,10 @@ pub unsafe extern "C" fn uiohook_dispatch_proc(event_ref: *mut _uiohook_event) {
 
             let keybinds = KEYBINDS.lock();
             if let Some(id) = keybinds.unwrap().get_keybind_id(&keybind) {
-                TX.get().unwrap().send(KeybindTrigger::Pressed(id.clone())).unwrap();
+                TX.get()
+                    .unwrap()
+                    .send(KeybindTrigger::Pressed(id.clone()))
+                    .unwrap();
                 down.replace((keybind, id));
             }
         });
