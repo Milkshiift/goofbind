@@ -9,10 +9,10 @@ use uiohook_sys::{
 };
 
 use crate::errors::{Result, VenbindError};
-use crate::structs::{Keybind, KeybindId, KeybindTrigger, Keybinds};
+use crate::structs::{Shortcut, KeybindInfo, KeybindId, KeybindTrigger, Keybinds};
 
 static KEYBINDS: LazyLock<Mutex<Keybinds>> = LazyLock::new(|| Mutex::new(Keybinds::default()));
-static CURR_DOWN: LazyLock<Mutex<Option<(Keybind, KeybindId)>>> =
+static CURR_DOWN: LazyLock<Mutex<Option<(Shortcut, KeybindId)>>> =
     LazyLock::new(|| Mutex::new(None));
 static TX: OnceLock<Sender<KeybindTrigger>> = OnceLock::new();
 
@@ -47,7 +47,7 @@ pub unsafe extern "C" fn dispatch_proc(event_ref: *mut _uiohook_event) {
         let shift = event.mask & uiohook_sys::MASK_SHIFT as u16 != 0;
         let alt = event.mask & uiohook_sys::MASK_ALT as u16 != 0;
         let ctrl = event.mask & uiohook_sys::MASK_CTRL as u16 != 0;
-        let keybind = Keybind {
+        let keybind = Shortcut {
             shift,
             alt,
             ctrl,
@@ -71,7 +71,10 @@ pub unsafe extern "C" fn dispatch_proc(event_ref: *mut _uiohook_event) {
 
         let keybinds = KEYBINDS.lock();
         if let Some(id) = keybinds.unwrap().get_keybind_id(&keybind) {
-            TX.get().unwrap().send(KeybindTrigger::Pressed(id.clone())).unwrap();
+            TX.get()
+                .unwrap()
+                .send(KeybindTrigger::Pressed(id.clone()))
+                .unwrap();
             down.replace((keybind, id));
         }
     } else if event.type_ == _event_type_EVENT_KEY_RELEASED {
@@ -86,14 +89,16 @@ pub unsafe extern "C" fn dispatch_proc(event_ref: *mut _uiohook_event) {
     }
 }
 
-pub(crate) fn register_keybind_internal(keybind: String, id: KeybindId) -> Result<()> {
-    let keybind = Keybind::from_string(keybind);
-    let mut keybinds = KEYBINDS.lock().unwrap();
-    keybinds.register_keybind(keybind, id);
-    Ok(())
-}
-pub(crate) fn unregister_keybind_internal(id: KeybindId) -> Result<()> {
-    let mut keybinds = KEYBINDS.lock().unwrap();
-    keybinds.unregister_keybind(id);
+pub(crate) fn set_keybinds_internal(keybinds: Vec<KeybindInfo>) -> Result<()> {
+    let mut keybinds_mutex = KEYBINDS.lock().unwrap();
+    keybinds_mutex.clear();
+    keybinds.iter().for_each(|x| {
+        if x.shortcut.is_some() {
+            keybinds_mutex.register_keybind(
+                Shortcut::from_string(x.shortcut.clone().unwrap()),
+                x.id.clone(),
+            )
+        }
+    });
     Ok(())
 }

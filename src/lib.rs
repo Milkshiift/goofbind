@@ -11,17 +11,14 @@ use std::sync::mpsc::Sender;
 
 use errors::Result;
 use platform::*;
-use structs::{KeybindId, KeybindTrigger};
+use structs::{KeybindInfo, KeybindTrigger};
 
 pub fn start_keybinds(tx: Sender<KeybindTrigger>, app_id: Option<String>) -> Result<()> {
     start_keybinds_internal(tx, app_id)
 }
 
-pub fn register_keybind(keybind: String, id: KeybindId) -> Result<()> {
-    register_keybind_internal(keybind, id)
-}
-pub fn unregister_keybind(id: KeybindId) -> Result<()> {
-    unregister_keybind_internal(id)
+pub fn set_keybinds(keybinds: Vec<KeybindInfo>) -> Result<()> {
+    set_keybinds_internal(keybinds)
 }
 
 #[cfg(test)]
@@ -29,8 +26,7 @@ mod tests {
     use std::{sync::mpsc::channel, thread};
 
     use crate::{
-        register_keybind, start_keybinds,
-        structs::{KeybindTrigger, PreRegisterAction},
+    set_keybinds, start_keybinds, structs::{KeybindInfo, KeybindTrigger}
     };
     #[test]
     fn demo() {
@@ -39,28 +35,18 @@ mod tests {
             start_keybinds(tx, None).unwrap();
         });
         thread::sleep(std::time::Duration::from_secs(2));
-        #[cfg(target_os = "linux")]
-        if crate::using_xdg() {
-            crate::xdg_preregister_keybinds(vec![
-                PreRegisterAction {
-                    id: "1".to_owned(),
-                    name: "Does a thing!".to_owned(),
-                },
-                PreRegisterAction {
-                    id: "2".to_owned(),
-                    name: "Does another thing!".to_owned(),
-                },
-            ])
-            .unwrap();
-        } else {
-            register_keybind("shift+alt+m".to_string(), "1".to_string()).unwrap();
-            register_keybind("SHIFT+CTRL+a".to_string(), "2".to_string()).unwrap();
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            register_keybind("shift+alt+m".to_string(), 1).unwrap();
-            register_keybind("SHIFT+CTRL+a".to_string(), 2).unwrap();
-        }
+        set_keybinds(vec![
+            KeybindInfo {
+                id: "1".to_owned(),
+                name: Some("Does a thing!".to_owned()),
+                shortcut: Some("shift+alt+m".to_owned()),
+            },
+            KeybindInfo {
+                id: "2".to_owned(),
+                name: Some("Does another thing!".to_owned()),
+                shortcut: Some("shift+CTRL+a".to_owned()),
+            },
+        ]).unwrap();
 
         loop {
             match rx.recv() {

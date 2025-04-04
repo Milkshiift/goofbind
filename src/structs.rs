@@ -5,15 +5,16 @@ pub type KeybindId = String;
 #[cfg(feature = "node")]
 use napi_derive::napi;
 
-#[cfg_attr(feature = "node", napi(object))]
-pub struct PreRegisterAction {
-    pub id: String,
-    pub name: String,
-}
-
 #[derive(Default)]
 pub struct Keybinds {
-    keybinds: HashMap<Keybind, KeybindId>,
+    keybinds: HashMap<Shortcut, KeybindId>,
+}
+
+#[cfg_attr(feature = "node", napi(object))]
+pub struct KeybindInfo {
+    pub id: KeybindId,
+    pub name: Option<String>,
+    pub shortcut: Option<String>,
 }
 
 pub enum KeybindTrigger {
@@ -22,14 +23,14 @@ pub enum KeybindTrigger {
 }
 
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
-pub(crate) struct Keybind {
+pub(crate) struct Shortcut {
     pub shift: bool,
     pub alt: bool,
     pub ctrl: bool,
     pub character: Option<String>,
 }
 
-impl Keybind {
+impl Shortcut {
     pub fn from_string(keybind: String) -> Self {
         let lowercase_keybind = keybind.to_lowercase();
         let keys = lowercase_keybind.split("+");
@@ -52,7 +53,7 @@ impl Keybind {
     }
 }
 
-impl ToString for Keybind {
+impl ToString for Shortcut {
     fn to_string(&self) -> String {
         let mut res = String::new();
         // formatted for https://specifications.freedesktop.org/shortcuts-spec/latest/#specification
@@ -73,13 +74,13 @@ impl ToString for Keybind {
 }
 
 impl Keybinds {
-    pub fn register_keybind(&mut self, keybind: Keybind, id: KeybindId) {
+    pub fn register_keybind(&mut self, keybind: Shortcut, id: KeybindId) {
         self.keybinds.insert(keybind, id);
     }
-    pub fn unregister_keybind(&mut self, id: KeybindId) {
-        self.keybinds.retain(|_, x| *x != id);
+    pub fn clear(&mut self) {
+        self.keybinds.clear();
     }
-    pub fn get_keybind_id(&self, keybind: &Keybind) -> Option<KeybindId> {
+    pub fn get_keybind_id(&self, keybind: &Shortcut) -> Option<KeybindId> {
         self.keybinds.get(keybind).map(|x| x.clone())
     }
 }

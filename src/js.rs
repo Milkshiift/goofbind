@@ -11,9 +11,8 @@ use napi::{
 };
 use napi_derive::napi;
 
-use crate::structs::{KeybindId, KeybindTrigger};
+use crate::structs::{KeybindInfo, KeybindTrigger};
 
-pub use crate::structs::PreRegisterAction;
 
 static JS_ERROR_HANDLE: LazyLock<Mutex<Option<ThreadsafeFunction<String, ErrorStrategy::Fatal>>>> =
     LazyLock::new(|| Mutex::new(None));
@@ -60,24 +59,10 @@ pub fn start_keybinds(callback: JsFunction, app_id: Option<String>) -> Result<()
 }
 
 #[napi]
-pub fn register_keybind(keybind: String, #[napi(ts_arg_type = "string")] id: KeybindId) {
-    pass_to_js_error_handle!(crate::register_keybind(keybind, id));
-}
-
-#[napi]
-pub fn unregister_keybind(#[napi(ts_arg_type = "string")] id: KeybindId) {
-    pass_to_js_error_handle!(crate::unregister_keybind(id));
-}
-
-#[napi]
-pub fn preregister_keybinds(
-    #[napi(ts_arg_type = "PreRegisterAction[]")] actions: Vec<PreRegisterAction>,
+pub fn set_keybinds(
+    #[napi(ts_arg_type = "KeybindInfo[]")] keybinds: Vec<KeybindInfo>,
 ) {
-    #[cfg(target_os = "linux")]
-    pass_to_js_error_handle!(crate::platform::xdg_preregister_keybinds(actions));
-
-    #[cfg(not(target_os = "linux"))]
-    panic!("Can't preregister keybinds on non-linux!");
+    pass_to_js_error_handle!(crate::set_keybinds(keybinds));
 }
 
 #[napi(ts_args_type = "callback: (error: string) => void")]

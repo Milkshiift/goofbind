@@ -1,11 +1,10 @@
 export class Venbind {
   startKeybinds(callback: (id: string, keyup: boolean) => void, app_id: string | null): void;
-  registerKeybind(keybind: string, keybindId: string): void;
-  unregisterKeybind(keybindId: string): void;
-  preregisterKeybinds(actions: PreRegisterAction[]): void;
+  setKeybinds(keybinds: KeybindInfo[]): void;
   defineErrorHandle(callback: (error: string) => void): void;
 }
-export interface PreRegisterAction {
+export interface KeybindInfo {
   id: string
-  name: string
+  name?: string
+  shortcut?: string
 }
