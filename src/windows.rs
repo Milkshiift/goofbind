@@ -9,11 +9,17 @@ use uiohook_sys::{
 };
 
 use crate::errors::{Result, VenbindError};
-use crate::structs::{Shortcut, KeybindInfo, KeybindId, KeybindTrigger, Keybinds};
+use crate::structs::{KeybindInfo, KeybindTrigger, Keybinds, Shortcut};
 
 static KEYBINDS: LazyLock<Mutex<Keybinds>> = LazyLock::new(|| Mutex::new(Keybinds::default()));
-static CURR_DOWN: LazyLock<Mutex<Option<(Shortcut, KeybindId)>>> =
-    LazyLock::new(|| Mutex::new(None));
+static CURR_DOWN: LazyLock<Mutex<Shortcut>> = LazyLock::new(|| {
+    Mutex::new(Shortcut {
+        shift: false,
+        alt: false,
+        ctrl: false,
+        character: None,
+    })
+});
 static TX: OnceLock<Sender<KeybindTrigger>> = OnceLock::new();
 
 pub(crate) fn start_keybinds_internal(tx: Sender<KeybindTrigger>, _: Option<String>) -> Result<()> {
@@ -31,7 +37,8 @@ pub(crate) fn start_keybinds_internal(tx: Sender<KeybindTrigger>, _: Option<Stri
 #[no_mangle]
 pub unsafe extern "C" fn dispatch_proc(event_ref: *mut _uiohook_event) {
     let event = *event_ref;
-    if event.type_ == _event_type_EVENT_KEY_PRESSED {
+    if event.type_ == _event_type_EVENT_KEY_PRESSED || event.type_ == _event_type_EVENT_KEY_RELEASED
+    {
         let keycode = uiohook_sys::platform::scancode_to_keycode(event.data.keyboard.keycode);
 
         const BUF_SIZE: usize = 8;
@@ -47,44 +54,32 @@ pub unsafe extern "C" fn dispatch_proc(event_ref: *mut _uiohook_event) {
         let shift = event.mask & uiohook_sys::MASK_SHIFT as u16 != 0;
         let alt = event.mask & uiohook_sys::MASK_ALT as u16 != 0;
         let ctrl = event.mask & uiohook_sys::MASK_CTRL as u16 != 0;
-        let keybind = Shortcut {
+        let shortcut = Shortcut {
             shift,
             alt,
             ctrl,
-            character: if !key.is_empty() {
-                Some(key.to_string_lossy().to_lowercase())
-            } else {
+            character: if key.is_empty() || event.type_ == _event_type_EVENT_KEY_RELEASED {
                 None
+            } else {
+                Some(key.to_string_lossy().to_lowercase())
             },
         };
         let mut down = CURR_DOWN.lock().unwrap();
-        if let Some((down_keybind, id)) = &*down {
-            if *down_keybind == keybind {
-                return; // prevent repeating Pressed triggers
+        if shortcut != *down {
+            let keybinds = KEYBINDS.lock().unwrap();
+            if let Some(id) = keybinds.get_keybind_id(&down) {
+                TX.get()
+                    .unwrap()
+                    .send(KeybindTrigger::Released(id.clone()))
+                    .unwrap();
             }
-            TX.get()
-                .unwrap()
-                .send(KeybindTrigger::Released(id.clone()))
-                .unwrap();
-            down.take();
-        }
-
-        let keybinds = KEYBINDS.lock();
-        if let Some(id) = keybinds.unwrap().get_keybind_id(&keybind) {
-            TX.get()
-                .unwrap()
-                .send(KeybindTrigger::Pressed(id.clone()))
-                .unwrap();
-            down.replace((keybind, id));
-        }
-    } else if event.type_ == _event_type_EVENT_KEY_RELEASED {
-        let mut down = CURR_DOWN.lock().unwrap();
-        if let Some((_, id)) = &*down {
-            TX.get()
-                .unwrap()
-                .send(KeybindTrigger::Released(id.clone()))
-                .unwrap();
-            down.take();
+            let _ = std::mem::replace(&mut *down, shortcut);
+            if let Some(id) = keybinds.get_keybind_id(&down) {
+                TX.get()
+                    .unwrap()
+                    .send(KeybindTrigger::Pressed(id.clone()))
+                    .unwrap();
+            }
         }
     }
 }
@@ -101,4 +96,9 @@ pub(crate) fn set_keybinds_internal(keybinds: Vec<KeybindInfo>) -> Result<()> {
         }
     });
     Ok(())
+}
+
+pub(crate) fn get_current_shortcut_internal() -> Result<String> {
+    let down = CURR_DOWN.lock().unwrap();
+    Ok(down.to_string())
 }

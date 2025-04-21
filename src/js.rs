@@ -13,17 +13,16 @@ use napi_derive::napi;
 
 use crate::structs::{KeybindInfo, KeybindTrigger};
 
-
 static JS_ERROR_HANDLE: LazyLock<Mutex<Option<ThreadsafeFunction<String, ErrorStrategy::Fatal>>>> =
     LazyLock::new(|| Mutex::new(None));
 
 macro_rules! pass_to_js_error_handle {
     ($func:expr) => {
-        let _ = $func.inspect_err(|e| {
+        $func.inspect_err(|e| {
             if let Some(err_func) = &*JS_ERROR_HANDLE.lock().unwrap() {
                 err_func.call(format!("{e}"), ThreadsafeFunctionCallMode::Blocking);
             }
-        });
+        })
     };
 }
 
@@ -31,7 +30,7 @@ macro_rules! pass_to_js_error_handle {
 pub fn start_keybinds(callback: JsFunction, app_id: Option<String>) -> Result<()> {
     let (tx, rx) = channel::<KeybindTrigger>();
     thread::spawn(|| {
-        pass_to_js_error_handle!(crate::start_keybinds(tx, app_id));
+        let _ = pass_to_js_error_handle!(crate::start_keybinds(tx, app_id));
     });
     let thread_function: ThreadsafeFunction<(String, bool), ErrorStrategy::Fatal> = callback
         .create_threadsafe_function(0, |ctx: ThreadSafeCallContext<(String, bool)>| {
@@ -59,10 +58,8 @@ pub fn start_keybinds(callback: JsFunction, app_id: Option<String>) -> Result<()
 }
 
 #[napi]
-pub fn set_keybinds(
-    #[napi(ts_arg_type = "KeybindInfo[]")] keybinds: Vec<KeybindInfo>,
-) {
-    pass_to_js_error_handle!(crate::set_keybinds(keybinds));
+pub fn set_keybinds(#[napi(ts_arg_type = "KeybindInfo[]")] keybinds: Vec<KeybindInfo>) {
+    let _ = pass_to_js_error_handle!(crate::set_keybinds(keybinds));
 }
 
 #[napi(ts_args_type = "callback: (error: string) => void")]
@@ -73,4 +70,9 @@ pub fn define_error_handle(callback: JsFunction) -> Result<()> {
         })?;
     JS_ERROR_HANDLE.lock().unwrap().replace(error_function);
     Ok(())
+}
+
+#[napi]
+pub fn get_current_shortcut() -> String {
+    (pass_to_js_error_handle!(crate::get_current_shortcut())).unwrap_or(String::from(""))
 }

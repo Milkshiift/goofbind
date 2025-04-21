@@ -19,11 +19,17 @@ use xcb::Extension;
 use xkbcommon::xkb::{self, State};
 
 use crate::errors::{Result, VenbindError};
-use crate::structs::{KeybindId, KeybindInfo, KeybindTrigger, Keybinds, Shortcut};
+use crate::structs::{KeybindInfo, KeybindTrigger, Keybinds, Shortcut};
 
 static KEYBINDS: LazyLock<Mutex<Keybinds>> = LazyLock::new(|| Mutex::new(Keybinds::default()));
-static CURR_DOWN: LazyLock<Mutex<Option<(Shortcut, KeybindId)>>> =
-    LazyLock::new(|| Mutex::new(None));
+static CURR_DOWN: LazyLock<Mutex<Shortcut>> = LazyLock::new(|| {
+    Mutex::new(Shortcut {
+        shift: false,
+        alt: false,
+        ctrl: false,
+        character: None,
+    })
+});
 static TX: OnceLock<Sender<KeybindTrigger>> = OnceLock::new();
 
 static XDG_STATE: LazyLock<Mutex<Option<XDGState>>> = LazyLock::new(|| Mutex::new(None));
@@ -134,7 +140,8 @@ pub(crate) fn xdg_set_keybinds(keybinds: Vec<KeybindInfo>) -> Result<()> {
 #[no_mangle]
 pub unsafe extern "C" fn uiohook_dispatch_proc(event_ref: *mut _uiohook_event) {
     let event = &*event_ref;
-    if event.type_ == _event_type_EVENT_KEY_PRESSED {
+    if event.type_ == _event_type_EVENT_KEY_PRESSED || event.type_ == _event_type_EVENT_KEY_RELEASED
+    {
         XKBCOMMON_STATE.with(|state| {
             let state_borrow = state.borrow();
             let state = state_borrow.as_ref().unwrap();
@@ -143,42 +150,34 @@ pub unsafe extern "C" fn uiohook_dispatch_proc(event_ref: *mut _uiohook_event) {
             let shift = event.mask & uiohook_sys::MASK_SHIFT as u16 != 0;
             let alt = event.mask & uiohook_sys::MASK_ALT as u16 != 0;
             let ctrl = event.mask & uiohook_sys::MASK_CTRL as u16 != 0;
-            let keybind = Shortcut {
+            let shortcut = Shortcut {
                 shift,
                 alt,
                 ctrl,
-                character: if !key.is_empty() { Some(key) } else { None },
+                character: if key.is_empty() || event.type_ == _event_type_EVENT_KEY_RELEASED {
+                    None
+                } else {
+                    Some(key)
+                },
             };
             let mut down = CURR_DOWN.lock().unwrap();
-            if let Some((down_keybind, id)) = &*down {
-                if *down_keybind == keybind {
-                    return; // prevent repeating Pressed triggers
+            if shortcut != *down {
+                let keybinds = KEYBINDS.lock().unwrap();
+                if let Some(id) = keybinds.get_keybind_id(&down) {
+                    TX.get()
+                        .unwrap()
+                        .send(KeybindTrigger::Released(id.clone()))
+                        .unwrap();
                 }
-                TX.get()
-                    .unwrap()
-                    .send(KeybindTrigger::Released(id.clone()))
-                    .unwrap();
-                down.take();
-            }
-
-            let keybinds = KEYBINDS.lock();
-            if let Some(id) = keybinds.unwrap().get_keybind_id(&keybind) {
-                TX.get()
-                    .unwrap()
-                    .send(KeybindTrigger::Pressed(id.clone()))
-                    .unwrap();
-                down.replace((keybind, id));
+                let _ = std::mem::replace(&mut *down, shortcut);
+                if let Some(id) = keybinds.get_keybind_id(&down) {
+                    TX.get()
+                        .unwrap()
+                        .send(KeybindTrigger::Pressed(id.clone()))
+                        .unwrap();
+                }
             }
         });
-    } else if event.type_ == _event_type_EVENT_KEY_RELEASED {
-        let mut down = CURR_DOWN.lock().unwrap();
-        if let Some((_, id)) = &*down {
-            TX.get()
-                .unwrap()
-                .send(KeybindTrigger::Released(id.clone()))
-                .unwrap();
-            down.take();
-        }
     }
 }
 
@@ -229,6 +228,11 @@ fn uiohook_set_keybinds(keybinds: Vec<KeybindInfo>) -> Result<()> {
         }
     });
     Ok(())
+}
+
+pub(crate) fn get_current_shortcut_internal() -> Result<String> {
+    let down = CURR_DOWN.lock().unwrap();
+    Ok(down.to_string())
 }
 
 #[inline]

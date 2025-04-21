@@ -21,12 +21,17 @@ pub fn set_keybinds(keybinds: Vec<KeybindInfo>) -> Result<()> {
     set_keybinds_internal(keybinds)
 }
 
+pub fn get_current_shortcut() -> Result<String> {
+    get_current_shortcut_internal()
+}
+
 #[cfg(test)]
 mod tests {
     use std::{sync::mpsc::channel, thread};
 
     use crate::{
-    set_keybinds, start_keybinds, structs::{KeybindInfo, KeybindTrigger}
+        set_keybinds, start_keybinds,
+        structs::{KeybindInfo, KeybindTrigger},
     };
     #[test]
     fn demo() {
@@ -46,7 +51,8 @@ mod tests {
                 name: Some("Does another thing!".to_owned()),
                 shortcut: Some("shift+CTRL+a".to_owned()),
             },
-        ]).unwrap();
+        ])
+        .unwrap();
 
         loop {
             match rx.recv() {
