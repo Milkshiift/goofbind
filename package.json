@@ -1,10 +1,10 @@
 {
   "name": "venbind",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "",
   "types": "./lib/venbind.d.ts",
   "scripts": {},
-  "cpu": ["x64"],
+  "cpu": ["x64", "arm64"],
   "os": ["linux", "win32"],
   "keywords": [],
   "author": "Tuxinal"

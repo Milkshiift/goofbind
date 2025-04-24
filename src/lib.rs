@@ -30,8 +30,7 @@ mod tests {
     use std::{sync::mpsc::channel, thread};
 
     use crate::{
-        set_keybinds, start_keybinds,
-        structs::{KeybindInfo, KeybindTrigger},
+        get_current_shortcut, set_keybinds, start_keybinds, structs::{KeybindInfo, KeybindTrigger}
     };
     #[test]
     fn demo() {
@@ -66,6 +65,25 @@ mod tests {
                     println!("released {}", x);
                 }
             }
+        }
+    }
+    #[test]
+    fn current_shortcut() {
+        #[cfg(target_os = "linux")]
+        assert!(!crate::using_xdg(), "can't get current shortcut on wayland");
+
+        let (tx, _) = channel();
+        thread::spawn(|| {
+            start_keybinds(tx, None).unwrap();
+        });
+        let mut current_shortcut = String::new();
+        loop {
+            let curr = get_current_shortcut().unwrap();
+            if curr == current_shortcut || curr == "" {
+                continue;
+            }
+            let _ = std::mem::replace(&mut current_shortcut, curr);
+            println!("{}", current_shortcut);
         }
     }
 }

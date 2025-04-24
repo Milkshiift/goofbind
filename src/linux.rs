@@ -108,7 +108,7 @@ async fn xdg_input_thread() -> Result<()> {
     }
 }
 
-pub(crate) fn xdg_set_keybinds(keybinds: Vec<KeybindInfo>) -> Result<()> {
+fn xdg_set_keybinds(keybinds: Vec<KeybindInfo>) -> Result<()> {
     if !using_xdg() {
         return Err(VenbindError::UnsupportedOnXdg);
     }
