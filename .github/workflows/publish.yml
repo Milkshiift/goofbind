@@ -17,7 +17,9 @@ jobs:
             target_suffix: -pc-windows-msvc
         arch: [x86_64, aarch64]
         exclude:
-          - os: windows
+          - platform:
+              os: windows
+              target_suffix: -unknown-linux-gnu
             arch: aarch64 # TODO
     runs-on: ubuntu-latest
     steps:
