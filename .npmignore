@@ -14,3 +14,8 @@ devenv.local.nix
 
 .gitignore
 .github
+
+src
+Cargo.*
+build.rs
+uiohook-sys
