@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 pub type KeybindId = String;
 
@@ -7,7 +7,7 @@ use napi_derive::napi;
 
 #[derive(Default)]
 pub struct Keybinds {
-    keybinds: HashMap<Shortcut, KeybindId>,
+    keybinds: Vec<(Shortcut, KeybindId)>,
 }
 
 #[cfg_attr(feature = "node", napi(object))]
@@ -22,12 +22,13 @@ pub enum KeybindTrigger {
     Released(KeybindId),
 }
 
-#[derive(PartialEq, Eq, Hash, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub(crate) struct Shortcut {
     pub shift: bool,
     pub alt: bool,
     pub ctrl: bool,
-    pub character: Option<String>,
+    pub meta: bool,
+    pub keys: HashSet<String>,
 }
 
 impl Shortcut {
@@ -37,18 +38,23 @@ impl Shortcut {
         let mut shift = false;
         let mut alt = false;
         let mut ctrl = false;
-        let mut character = None;
+        let mut meta = false;
+        let mut chars = HashSet::new();
         keys.for_each(|x| match x {
             "shift" => shift = true,
             "alt" => alt = true,
             "ctrl" => ctrl = true,
-            _ => character = Some(x.to_owned()),
+            "meta" => meta = true,
+            _ => {
+                chars.insert(x.to_owned());
+            }
         });
         Self {
             shift,
             alt,
             ctrl,
-            character,
+            meta,
+            keys: chars,
         }
     }
 }
@@ -66,8 +72,17 @@ impl ToString for Shortcut {
         if self.ctrl {
             res.push_str("+CTRL");
         }
-        if let Some(character) = &self.character {
-            res.push_str(&format!("+{}", character));
+        if self.meta {
+            res.push_str("+META");
+        }
+        if !self.keys.is_empty() {
+            res.push_str(
+                &self
+                    .keys
+                    .iter()
+                    .map(|x| format!("+{}", x))
+                    .collect::<String>(),
+            );
         }
         res.trim_start_matches("+").to_owned()
     }
@@ -75,12 +90,22 @@ impl ToString for Shortcut {
 
 impl Keybinds {
     pub fn register_keybind(&mut self, keybind: Shortcut, id: KeybindId) {
-        self.keybinds.insert(keybind, id);
+        self.keybinds.push((keybind, id));
     }
     pub fn clear(&mut self) {
         self.keybinds.clear();
     }
-    pub fn get_keybind_id(&self, keybind: &Shortcut) -> Option<KeybindId> {
-        self.keybinds.get(keybind).map(|x| x.clone())
+    pub fn get_active_keybinds(&self, keys: &Shortcut) -> Vec<KeybindId> {
+        self.keybinds
+            .iter()
+            .filter(|x| {
+                x.0.keys.is_subset(&keys.keys)
+                    && (!x.0.alt || (x.0.alt == keys.alt))
+                    && (!x.0.ctrl || (x.0.ctrl == keys.ctrl))
+                    && (!x.0.shift || (x.0.shift == keys.shift))
+                    && (!x.0.meta || (x.0.meta == keys.meta))
+            })
+            .map(|x| x.1.clone())
+            .collect()
     }
 }

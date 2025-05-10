@@ -7,6 +7,7 @@ use ashpd::{
 use futures::{executor::block_on, future::Either};
 use std::{
     cell::RefCell,
+    collections::HashSet,
     env,
     str::FromStr,
     sync::{mpsc::Sender, LazyLock, Mutex, OnceLock},
@@ -16,10 +17,13 @@ use uiohook_sys::{
     hook_set_dispatch_proc, UIOHOOK_SUCCESS,
 };
 use xcb::Extension;
-use xkbcommon::xkb::{self, State};
+use xkbcommon::xkb::{self, Keysym, State};
 
-use crate::errors::{Result, VenbindError};
 use crate::structs::{KeybindInfo, KeybindTrigger, Keybinds, Shortcut};
+use crate::{
+    errors::{Result, VenbindError},
+    structs::KeybindId,
+};
 
 static KEYBINDS: LazyLock<Mutex<Keybinds>> = LazyLock::new(|| Mutex::new(Keybinds::default()));
 static CURR_DOWN: LazyLock<Mutex<Shortcut>> = LazyLock::new(|| {
@@ -27,9 +31,12 @@ static CURR_DOWN: LazyLock<Mutex<Shortcut>> = LazyLock::new(|| {
         shift: false,
         alt: false,
         ctrl: false,
-        character: None,
+        meta: false,
+        keys: HashSet::new(),
     })
 });
+static CURR_ACTIVE_KEYBINDS: LazyLock<Mutex<HashSet<KeybindId>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
 static TX: OnceLock<Sender<KeybindTrigger>> = OnceLock::new();
 
 static XDG_STATE: LazyLock<Mutex<Option<XDGState>>> = LazyLock::new(|| Mutex::new(None));
@@ -138,45 +145,84 @@ fn xdg_set_keybinds(keybinds: Vec<KeybindInfo>) -> Result<()> {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn uiohook_dispatch_proc(event_ref: *mut _uiohook_event) {
-    let event = &*event_ref;
+pub extern "C" fn uiohook_dispatch_proc(event_ref: *mut _uiohook_event) {
+    let event = &unsafe { *event_ref };
     if event.type_ == _event_type_EVENT_KEY_PRESSED || event.type_ == _event_type_EVENT_KEY_RELEASED
     {
         XKBCOMMON_STATE.with(|state| {
             let state_borrow = state.borrow();
             let state = state_borrow.as_ref().unwrap();
-            let keycode = uiohook_sys::platform::scancode_to_keycode(event.data.keyboard.keycode);
-            let key = state.key_get_utf8(keycode.into());
             let shift = event.mask & uiohook_sys::MASK_SHIFT as u16 != 0;
             let alt = event.mask & uiohook_sys::MASK_ALT as u16 != 0;
             let ctrl = event.mask & uiohook_sys::MASK_CTRL as u16 != 0;
-            let shortcut = Shortcut {
-                shift,
-                alt,
-                ctrl,
-                character: if key.is_empty() || event.type_ == _event_type_EVENT_KEY_RELEASED {
-                    None
-                } else {
-                    Some(key)
-                },
-            };
-            let mut down = CURR_DOWN.lock().unwrap();
-            if shortcut != *down {
-                let keybinds = KEYBINDS.lock().unwrap();
-                if let Some(id) = keybinds.get_keybind_id(&down) {
-                    TX.get()
-                        .unwrap()
-                        .send(KeybindTrigger::Released(id.clone()))
-                        .unwrap();
+            let meta = event.mask & uiohook_sys::MASK_META as u16 != 0;
+            let keycode =
+                unsafe { uiohook_sys::platform::scancode_to_keycode(event.data.keyboard.keycode) };
+            // get the keysym from the keycode to always use a static keyboard layout
+            let keysym = state.key_get_one_sym(keycode.into());
+            let key = match keysym {
+                // Keys that do have an ascii representation but the keysym name is more fitting
+                Keysym::Escape
+                | Keysym::BackSpace
+                | Keysym::Return
+                | Keysym::Tab
+                | Keysym::Delete
+                | Keysym::space => {
+                    Some(format!("{:?}", keysym).trim_start_matches("XK_").to_owned())
                 }
-                let _ = std::mem::replace(&mut *down, shortcut);
-                if let Some(id) = keybinds.get_keybind_id(&down) {
-                    TX.get()
-                        .unwrap()
-                        .send(KeybindTrigger::Pressed(id.clone()))
-                        .unwrap();
+                // Keys that are already considered in the event.mask
+                Keysym::Shift_L
+                | Keysym::Shift_R
+                | Keysym::Control_L
+                | Keysym::Control_R
+                | Keysym::Alt_L
+                | Keysym::Alt_R
+                | Keysym::Super_L
+                | Keysym::Super_R => None,
+                // Everything else
+                _ => {
+                    let key = state.key_get_utf8(keycode.into());
+                    if key.is_empty() {
+                        Some(format!("{:?}", keysym).trim_start_matches("XK_").to_owned())
+                    } else {
+                        Some(key)
+                    }
+                }
+            };
+            let mut curr_down = CURR_DOWN.lock().unwrap();
+            curr_down.alt = alt;
+            curr_down.shift = shift;
+            curr_down.ctrl = ctrl;
+            curr_down.meta = meta;
+            if let Some(key) = key {
+                if event.type_ == _event_type_EVENT_KEY_PRESSED {
+                    curr_down.keys.insert(key);
+                } else {
+                    curr_down.keys.remove(&key);
                 }
             }
+            let keybinds = KEYBINDS.lock().unwrap();
+            let active: HashSet<String> = keybinds
+                .get_active_keybinds(&curr_down)
+                .into_iter()
+                .collect();
+            let mut curr_active_keybinds = CURR_ACTIVE_KEYBINDS.lock().unwrap();
+            let pressed_keybinds = active.difference(&curr_active_keybinds);
+            let released_keybinds = curr_active_keybinds.difference(&active);
+            for pressed in pressed_keybinds {
+                TX.get()
+                    .unwrap()
+                    .send(KeybindTrigger::Pressed(pressed.clone()))
+                    .unwrap();
+            }
+            for released in released_keybinds {
+                TX.get()
+                    .unwrap()
+                    .send(KeybindTrigger::Released(released.clone()))
+                    .unwrap();
+            }
+            curr_active_keybinds.clear();
+            curr_active_keybinds.extend(active);
         });
     }
 }
