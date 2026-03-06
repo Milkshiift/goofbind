@@ -12,3 +12,5 @@ devenv.local.nix
 
 index.d.ts
 index.node
+
+.idea
