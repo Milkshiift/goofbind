@@ -4,17 +4,18 @@ mod x11;
 use std::env;
 use std::sync::mpsc::Sender;
 
+use crate::errors::Result;
 use crate::platform::PlatformUpdater;
 use crate::structs::InternalMessage;
 
 pub fn start_keybinds(
     tx: Sender<InternalMessage>,
     app_id: Option<String>,
-) -> Option<PlatformUpdater> {
+) -> Result<Option<PlatformUpdater>> {
     if using_xdg() {
-        Some(wayland::start_keybinds(tx, app_id))
+        Ok(Some(wayland::start_keybinds(tx, app_id)))
     } else {
-        x11::start_keybinds(tx)
+        Ok(x11::start_keybinds(tx))
     }
 }
 

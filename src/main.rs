@@ -21,7 +21,15 @@ fn main() {
     let app_id = env::args().nth(1);
     let (tx, rx) = channel::<InternalMessage>();
 
-    let platform_updater = platform::start_keybinds(tx.clone(), app_id);
+    let platform_updater = match platform::start_keybinds(tx.clone(), app_id) {
+        Ok(updater) => updater,
+        Err(e) => {
+            emit_event(&OutgoingMessage::Error {
+                message: e.to_string(),
+            });
+            std::process::exit(1);
+        }
+    };
 
     let stdin_tx = tx;
     thread::spawn(move || {

@@ -14,7 +14,9 @@ static HOOK_TX: OnceLock<Sender<InternalMessage>> = OnceLock::new();
 
 unsafe extern "system" fn hook_callback(ncode: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if ncode == HC_ACTION as i32 {
-        let kbd_struct = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
+        // SAFETY: when ncode == HC_ACTION, lparam points to a valid KBDLLHOOKSTRUCT
+        // supplied by the OS for the duration of this callback.
+        let kbd_struct = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
         let msg = wparam.0 as u32;
 
         let is_pressed = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
@@ -38,7 +40,7 @@ unsafe extern "system" fn hook_callback(ncode: i32, wparam: WPARAM, lparam: LPAR
             }
         }
     }
-    CallNextHookEx(None, ncode, wparam, lparam)
+    unsafe { CallNextHookEx(None, ncode, wparam, lparam) }
 }
 
 pub(crate) fn start_keybinds(
