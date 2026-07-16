@@ -41,10 +41,24 @@ async fn run_wayland_loop(
     update_rx: futures::channel::mpsc::UnboundedReceiver<Vec<KeybindInfo>>,
     app_id: Option<String>,
 ) -> Result<()> {
-    if let Some(app_id_str) = app_id
-        && let Ok(id) = AppID::from_str(&app_id_str)
-    {
-        let _ = register_host_app(id).await;
+    match app_id {
+        Some(app_id_str) => {
+            match AppID::from_str(&app_id_str) {
+                Ok(id) => {
+                    if let Err(err) = register_host_app(id).await {
+                        eprintln!("Goofbind: Failed to register host app: {:?}", err);
+                    } else {
+                        eprintln!("Goofbind: Successfully registered host app with ID: {}", app_id_str);
+                    }
+                }
+                Err(err) => {
+                    eprintln!("Goofbind: Failed to parse AppID from '{}': {:?}", app_id_str, err);
+                }
+            }
+        }
+        None => {
+            eprintln!("Goofbind: No app_id argument was passed to the binary.");
+        }
     }
 
     let portal = GlobalShortcuts::new().await?;
