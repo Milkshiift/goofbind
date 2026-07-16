@@ -1,16 +1,2 @@
 /target
-/dist
-# Devenv
-.devenv*
-devenv.local.nix
-
-# direnv
-.direnv
-
-# pre-commit
-.pre-commit-config.yaml
-
-index.d.ts
-index.node
-
 .idea
