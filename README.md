@@ -14,8 +14,6 @@ It can be intergrated with any language that supports spawning child processes a
 - **Linux (X11)**: Listens for raw input events via `rdev`.
 - **Linux (Wayland)**: Integrates with the `org.freedesktop.portal.GlobalShortcuts` portal via the `ashpd` crate.
 
----
-
 ## Compiling
 ```sh
 git clone https://github.com/Milkshiift/goofbind.git
@@ -23,6 +21,8 @@ cd goofbind
 
 cargo build
 ```
+
+On Linux, you will also need: `sudo apt-get install pkg-config libwayland-dev libxkbcommon-dev libx11-dev libxtst-dev` (Ubuntu/Debian)
 
 ## Usage
 
