@@ -1,37 +1,27 @@
 [package]
 name = "goofbind"
-version = "0.1.7"
-edition = "2021"
-
-[lib]
-crate-type = ["cdylib"]
-
-[profile.release]
-lto = true
+version = "0.0.1"
+edition = "2024"
 
 [dependencies]
-uiohook-sys = { path = "./uiohook-sys" }
-thiserror = "1.0"
-futures = "0.3"
-napi = { version = "2", features = ["napi4"], optional = true }
-napi-derive = { version = "2", optional = true }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-xcb = { version = "1", features = ["x11", "xkb", "as-raw-xcb-connection"] }
-xkbcommon = { version = "0.8", features = ["x11"] }
-ashpd = { version = "0.11", features = ["wayland", "async-std"], default-features = false }
+ashpd = { version = "0.13", features = ["wayland", "async-io", "global_shortcuts"], default-features = false }
+futures = "0.3"
+rdev = "0.5.3"
 
-[target.'cfg(target_os = "windows")'.dependencies.windows]
-version = "0.61.1"
-features = ["Win32_UI_Input_KeyboardAndMouse"]
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = {version = "0.62", features = ["Win32_UI_Input_KeyboardAndMouse"]}
 
-[features]
-default = ["node"]
-node = ["dep:napi", "dep:napi-build", "dep:napi-derive"]
+[profile.release]
+lto = "fat"
+strip = "symbols"
+opt-level = "z"
+panic = "abort"
 
-[workspace]
-members = ["./uiohook-sys"]
-
-[build-dependencies]
-napi-build = { version = "2", optional = true }
-cmake = "0.1"
+[lints.clippy]
+pedantic = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+unwrap_used = "deny"

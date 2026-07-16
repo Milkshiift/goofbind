@@ -1,3 +1,0 @@
-[submodule "uiohook-sys/vendor"]
-	path = uiohook-sys/vendor
-	url = https://github.com/kwhat/libuiohook.git

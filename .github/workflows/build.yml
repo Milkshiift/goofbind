@@ -1,0 +1,116 @@
+name: Build and Commit Binaries
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.job-name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - job-name: linux-x64
+            os: ubuntu-26.04
+            target: x86_64-unknown-linux-gnu
+            binary-suffix: ""
+
+          - job-name: linux-arm64
+            os: ubuntu-26.04-arm
+            target: aarch64-unknown-linux-gnu
+            binary-suffix: ""
+
+          - job-name: windows-x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary-suffix: ".exe"
+
+          - job-name: windows-arm64
+            os: windows-latest
+            target: aarch64-pc-windows-msvc
+            binary-suffix: ".exe"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust nightly
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: "nightly"
+          target: ${{ matrix.target }}
+          components: rust-src
+
+      - name: Build binary
+        shell: bash
+        run: |
+          CRATE_NAME=$(grep -m 1 '^name =' Cargo.toml | cut -d '"' -f 2)
+          echo "CRATE_NAME=${CRATE_NAME}" >> $GITHUB_ENV
+          
+          RUSTFLAGS="-Zlocation-detail=none -Zunstable-options -Cpanic=immediate-abort" \
+          cargo build --release \
+            -Z build-std=std,panic_abort \
+            -Z build-std-features=optimize_for_size \
+            --target ${{ matrix.target }}
+
+      - name: Stage built binary
+        shell: bash
+        run: |
+          mkdir -p staging
+          SRC_PATH="target/${{ matrix.target }}/release/${{ env.CRATE_NAME }}${{ matrix.binary-suffix }}"
+          DST_PATH="staging/${{ env.CRATE_NAME }}-${{ matrix.job-name }}${{ matrix.binary-suffix }}"
+          cp "$SRC_PATH" "$DST_PATH"
+
+      - name: Upload temporary artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: binary-${{ matrix.job-name }}
+          path: staging/
+          retention-days: 1
+
+  commit:
+    name: Consolidate and Commit Binaries
+    needs: build
+    runs-on: ubuntu-slim
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # Fetch all history so we can push back cleanly
+          fetch-depth: 0
+
+      - name: Download all temporary artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: temp-binaries
+
+      - name: Consolidate binaries into dist/
+        run: |
+          mkdir -p dist
+          # Move files out of their respective download subdirectories into dist/
+          find temp-binaries/ -type f -exec cp {} dist/ \;
+          rm -rf temp-binaries
+          echo "Current dist/ contents:"
+          ls -la dist/
+
+      - name: Commit and push changes
+        run: |
+          # Configure Git using the standard GitHub Actions bot credentials
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          git add dist/
+          
+          # Only commit and push if differences actually exist
+          if git diff --cached --quiet; then
+            echo "No changes detected in binaries. Skipping commit."
+          else
+            git commit -m "chore: update compiled binaries in dist/ [skip ci]"
+            git push
+          fi

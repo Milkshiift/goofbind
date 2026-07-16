@@ -1,111 +1,94 @@
-use std::collections::HashSet;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 
-pub type KeybindId = String;
+const VK_SHIFT: u32 = 16;
+const VK_CONTROL: u32 = 17;
+const VK_ALT: u32 = 18;
+const VK_META: u32 = 91;
 
-#[cfg(feature = "node")]
-use napi_derive::napi;
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Deserialize, Debug, Clone)]
+pub struct KeybindInfo {
+    pub id: String,
+    pub name: Option<String>,
+    pub keycode: Option<u32>,
+    #[serde(default)]
+    pub ctrl: bool,
+    #[serde(default)]
+    pub alt: bool,
+    #[serde(default)]
+    pub shift: bool,
+    #[serde(default)]
+    pub meta: bool,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(tag = "command", rename_all = "snake_case")]
+pub enum IncomingMessage {
+    SetKeybinds { keybinds: Vec<KeybindInfo> },
+}
+
+#[derive(Serialize, Debug)]
+#[serde(tag = "event", rename_all = "snake_case")]
+pub enum OutgoingMessage {
+    Pressed { id: String },
+    Released { id: String },
+    Error { message: String },
+}
+
+pub enum InternalMessage {
+    Command(IncomingMessage),
+    RawKey { keycode: u32, pressed: bool },
+    WaylandEvent { id: String, pressed: bool },
+    FatalError(String),
+    Quit,
+}
 
 #[derive(Default)]
-pub struct Keybinds {
-    keybinds: Vec<(Shortcut, KeybindId)>,
+pub struct EngineState {
+    pub keybinds: Vec<KeybindInfo>,
+    pub pressed_keys: HashSet<u32>,
+    pub active_keybinds: HashMap<String, u32>,
 }
 
-#[cfg_attr(feature = "node", napi(object))]
-pub struct KeybindInfo {
-    pub id: KeybindId,
-    pub name: Option<String>,
-    pub shortcut: Option<String>,
-}
+impl EngineState {
+    pub fn handle_key<F>(&mut self, keycode: u32, is_pressed: bool, mut emit: F)
+    where
+        F: FnMut(OutgoingMessage),
+    {
+        if is_pressed {
+            self.pressed_keys.insert(keycode);
 
-pub enum KeybindTrigger {
-    Pressed(KeybindId),
-    Released(KeybindId),
-}
+            let ctrl = self.pressed_keys.contains(&VK_CONTROL) && keycode != VK_CONTROL;
+            let alt = self.pressed_keys.contains(&VK_ALT) && keycode != VK_ALT;
+            let shift = self.pressed_keys.contains(&VK_SHIFT) && keycode != VK_SHIFT;
+            let meta = self.pressed_keys.contains(&VK_META) && keycode != VK_META;
 
-#[derive(PartialEq, Eq, Debug, Clone)]
-pub(crate) struct Shortcut {
-    pub shift: bool,
-    pub alt: bool,
-    pub ctrl: bool,
-    pub meta: bool,
-    pub keys: HashSet<String>,
-}
-
-impl Shortcut {
-    pub fn from_string(keybind: String) -> Self {
-        let lowercase_keybind = keybind.to_lowercase();
-        let keys = lowercase_keybind.split("+");
-        let mut shift = false;
-        let mut alt = false;
-        let mut ctrl = false;
-        let mut meta = false;
-        let mut chars = HashSet::new();
-        keys.for_each(|x| match x {
-            "shift" => shift = true,
-            "alt" => alt = true,
-            "ctrl" => ctrl = true,
-            "meta" => meta = true,
-            _ => {
-                chars.insert(x.to_owned());
+            for kb in &self.keybinds {
+                if let Some(kc) = kb.keycode
+                    && kc == keycode
+                    && kb.ctrl == ctrl
+                    && kb.alt == alt
+                    && kb.shift == shift
+                    && kb.meta == meta
+                    && let std::collections::hash_map::Entry::Vacant(entry) =
+                        self.active_keybinds.entry(kb.id.clone())
+                {
+                    entry.insert(keycode);
+                    emit(OutgoingMessage::Pressed { id: kb.id.clone() });
+                }
             }
-        });
-        Self {
-            shift,
-            alt,
-            ctrl,
-            meta,
-            keys: chars,
-        }
-    }
-}
+        } else {
+            self.pressed_keys.remove(&keycode);
 
-impl ToString for Shortcut {
-    fn to_string(&self) -> String {
-        let mut res = String::new();
-        // formatted for https://specifications.freedesktop.org/shortcuts-spec/latest/#specification
-        if self.shift {
-            res.push_str("+SHIFT");
+            self.active_keybinds.retain(|id, &mut stored_keycode| {
+                if stored_keycode == keycode {
+                    emit(OutgoingMessage::Released { id: id.clone() });
+                    false
+                } else {
+                    true
+                }
+            });
         }
-        if self.alt {
-            res.push_str("+ALT");
-        }
-        if self.ctrl {
-            res.push_str("+CTRL");
-        }
-        if self.meta {
-            res.push_str("+META");
-        }
-        if !self.keys.is_empty() {
-            res.push_str(
-                &self
-                    .keys
-                    .iter()
-                    .map(|x| format!("+{}", x))
-                    .collect::<String>(),
-            );
-        }
-        res.trim_start_matches("+").to_owned()
-    }
-}
-
-impl Keybinds {
-    pub fn register_keybind(&mut self, keybind: Shortcut, id: KeybindId) {
-        self.keybinds.push((keybind, id));
-    }
-    pub fn clear(&mut self) {
-        self.keybinds.clear();
-    }
-    pub fn get_active_keybinds(&self, keys: &Shortcut) -> Vec<KeybindId> {
-        self.keybinds
-            .iter()
-            .filter(|x| {
-                x.0.keys.is_subset(&keys.keys)
-                    && (!x.0.alt || (x.0.alt == keys.alt))
-                    && (!x.0.ctrl || (x.0.ctrl == keys.ctrl))
-                    && (!x.0.shift || (x.0.shift == keys.shift))
-                    && (!x.0.meta || (x.0.meta == keys.meta))
-            })
-            .map(|x| x.1.clone())
-            .collect()
     }
 }
