@@ -15,7 +15,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     VK_SPACE, VK_TAB,
 };
 
-use crate::errors::{Result, VenbindError};
+use crate::errors::{Result, GoofbindError};
 use crate::structs::{KeybindId, KeybindInfo, KeybindTrigger, Keybinds, Shortcut};
 
 static KEYBINDS: LazyLock<Mutex<Keybinds>> = LazyLock::new(|| Mutex::new(Keybinds::default()));
@@ -38,7 +38,7 @@ pub(crate) fn start_keybinds_internal(tx: Sender<KeybindTrigger>, _: Option<Stri
     unsafe {
         hook_set_dispatch_proc(Some(dispatch_proc));
         if hook_run() != UIOHOOK_SUCCESS as i32 {
-            return Err(VenbindError::LibUIOHookError);
+            return Err(GoofbindError::LibUIOHookError);
         }
     };
     Ok(())

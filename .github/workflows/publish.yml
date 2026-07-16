@@ -33,12 +33,12 @@ jobs:
         run: |
           npx --yes --package=@napi-rs/cli@canary -- napi build --release --cross-compile --target ${{ matrix.arch }}${{ matrix.platform.target_suffix }}
           mkdir dist
-          cp index.node ./dist/venbind-${{ matrix.platform.os }}-${{ matrix.arch }}.node
+          cp index.node ./dist/goofbind-${{ matrix.platform.os }}-${{ matrix.arch }}.node
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform.os }}-${{ matrix.arch }}
-          path: ./dist/venbind-${{ matrix.platform.os }}-${{ matrix.arch }}.node
+          path: ./dist/goofbind-${{ matrix.platform.os }}-${{ matrix.arch }}.node
   publish:
     name: Publish
     needs: build

@@ -21,7 +21,7 @@ use xkbcommon::xkb::{self, Keysym, State};
 
 use crate::structs::{KeybindInfo, KeybindTrigger, Keybinds, Shortcut};
 use crate::{
-    errors::{Result, VenbindError},
+    errors::{Result, GoofbindError},
     structs::KeybindId,
 };
 
@@ -117,7 +117,7 @@ async fn xdg_input_thread() -> Result<()> {
 
 fn xdg_set_keybinds(keybinds: Vec<KeybindInfo>) -> Result<()> {
     if !using_xdg() {
-        return Err(VenbindError::UnsupportedOnXdg);
+        return Err(GoofbindError::UnsupportedOnXdg);
     }
     let shortcuts: Vec<NewShortcut> = keybinds
         .iter()
@@ -256,7 +256,7 @@ fn uiohook_start_keybinds() -> Result<()> {
     unsafe {
         hook_set_dispatch_proc(Some(uiohook_dispatch_proc));
         if hook_run() != UIOHOOK_SUCCESS as i32 {
-            return Err(VenbindError::LibUIOHookError);
+            return Err(GoofbindError::LibUIOHookError);
         }
     };
     Ok(())
