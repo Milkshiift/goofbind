@@ -29,12 +29,12 @@ jobs:
           - job-name: win-x64
             os: windows-latest
             target: x86_64-pc-windows-msvc
-            binary-suffix: ""
+            binary-suffix: ".exe"
 
           - job-name: win-arm64
             os: windows-latest
             target: aarch64-pc-windows-msvc
-            binary-suffix: ""
+            binary-suffix: ".exe"
 
     steps:
       - name: Checkout repository
