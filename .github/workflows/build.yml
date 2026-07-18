@@ -107,6 +107,9 @@ jobs:
           # Move files out of their respective download subdirectories into dist/
           find temp-binaries/ -type f -exec cp {} dist/ \;
           rm -rf temp-binaries
+          
+          chmod +x dist/*-linux-* 2>/dev/null || true
+          
           echo "Current dist/ contents:"
           ls -la dist/
 
