@@ -26,12 +26,12 @@ jobs:
             target: aarch64-unknown-linux-gnu
             binary-suffix: ""
 
-          - job-name: windows-x64
+          - job-name: win32-x64
             os: windows-latest
             target: x86_64-pc-windows-msvc
             binary-suffix: ".exe"
 
-          - job-name: windows-arm64
+          - job-name: win32-arm64
             os: windows-latest
             target: aarch64-pc-windows-msvc
             binary-suffix: ".exe"
